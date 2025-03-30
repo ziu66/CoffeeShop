@@ -127,7 +127,7 @@ public class RegisterForm extends JFrame {
         String phone = txtPhone.getText().trim();
         String address = txtAddress.getText().trim();
 
-        // Validation
+        // Validation (same as before)
         if (email.isEmpty() || password.isEmpty() || 
             fullName.isEmpty() || phone.isEmpty()) {
             JOptionPane.showMessageDialog(this,
@@ -158,13 +158,8 @@ public class RegisterForm extends JFrame {
             return;
         }
 
-        // Create new user
+        // Create new user without username
         User newUser = new User();
-        
-        // Generate username from email (before the @)
-        String username = email.split("@")[0];
-        newUser.setUsername(username);
-        
         newUser.setPassword(password);
         newUser.setEmail(email);
         newUser.setFullName(fullName);

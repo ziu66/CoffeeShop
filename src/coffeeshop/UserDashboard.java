@@ -58,11 +58,11 @@ public class UserDashboard extends JFrame {
     private JPanel createHeaderPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(Color.BLACK);
-        panel.setPreferredSize(new Dimension(1200, 250)); // Fixed header size
+        panel.setPreferredSize(new Dimension(1200, 250));
 
-        // 1. Welcome Message (Top)
+        // 1. Welcome Message (Top - optional, can remove if redundant)
         JLabel welcomeLabel = new JLabel("Welcome, " + currentUser.getFullName(), SwingConstants.CENTER);
-        welcomeLabel.setFont(new Font("Arial", Font.BOLD, 18));
+        welcomeLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         welcomeLabel.setForeground(Color.WHITE);
         welcomeLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
         panel.add(welcomeLabel, BorderLayout.NORTH);
@@ -71,33 +71,25 @@ public class UserDashboard extends JFrame {
         JPanel gifContainer = new JPanel(new BorderLayout());
         gifContainer.setBackground(Color.BLACK);
 
-        // GIF Loading with Debugging
-        // Replace your existing GIF loading code with this
-    try {
-        File gifFile = new File("C:\\Users\\sophi\\Downloads\\images\\header-backgroundd.gif");
-
-        if (gifFile.exists()) {
-            // Create ImageIcon directly from file path
-            ImageIcon gifIcon = new ImageIcon(gifFile.getAbsolutePath());
-
-            // Force the image to load completely before adding to container
-            Image img = gifIcon.getImage();
-            // This creates a new ImageIcon that's fully loaded
-            gifIcon = new ImageIcon(img);
-
-            JLabel gifLabel = new JLabel(gifIcon);
-            gifLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            gifContainer.add(gifLabel, BorderLayout.CENTER);
-        } else {
-            System.err.println("File does not exist: " + gifFile.getAbsolutePath());
-            throw new IOException("GIF file not found");
+        try {
+            File gifFile = new File("C:\\Users\\sophi\\Downloads\\images\\header-backgroundd.gif");
+            if (gifFile.exists()) {
+                ImageIcon gifIcon = new ImageIcon(gifFile.getAbsolutePath());
+                Image img = gifIcon.getImage();
+                gifIcon = new ImageIcon(img);
+                JLabel gifLabel = new JLabel(gifIcon);
+                gifLabel.setHorizontalAlignment(SwingConstants.CENTER);
+                gifContainer.add(gifLabel, BorderLayout.CENTER);
+            } else {
+                System.err.println("File does not exist: " + gifFile.getAbsolutePath());
+                throw new IOException("GIF file not found");
+            }
+        } catch (Exception e) {
+            System.err.println("GIF Error: " + e.getMessage());
+            JLabel errorLabel = new JLabel("Header Image Missing", SwingConstants.CENTER);
+            errorLabel.setForeground(Color.RED);
+            gifContainer.add(errorLabel, BorderLayout.CENTER);
         }
-    } catch (Exception e) {
-        System.err.println("GIF Error: " + e.getMessage());
-        JLabel errorLabel = new JLabel("Header Image Missing", SwingConstants.CENTER);
-        errorLabel.setForeground(Color.RED);
-        gifContainer.add(errorLabel, BorderLayout.CENTER);
-    }
 
         panel.add(gifContainer, BorderLayout.CENTER);
 
@@ -106,11 +98,11 @@ public class UserDashboard extends JFrame {
         navBar.setBackground(Color.BLACK);
         navBar.setPreferredSize(new Dimension(1200, 50));
 
-        // Logo + Navigation Buttons Container
+        // Left-aligned content (logo + buttons)
         JPanel navContent = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 5));
         navContent.setBackground(Color.BLACK);
 
-        // 3.1 Logo
+        // Logo
         URL logoUrl = getClass().getResource("/images/logo.png");
         if (logoUrl != null) {
             ImageIcon logoIcon = new ImageIcon(logoUrl);
@@ -123,7 +115,7 @@ public class UserDashboard extends JFrame {
             navContent.add(missingLogo);
         }
 
-        // 3.2 Navigation Buttons
+        // Navigation Buttons
         String[] navItems = {"MENU", "MERCHANDISE", "REWARDS"};
         navButtons = new JButton[navItems.length];
 
@@ -136,7 +128,6 @@ public class UserDashboard extends JFrame {
             navButtons[i].setContentAreaFilled(false);
             navButtons[i].setFocusPainted(false);
 
-            // Hover effect
             navButtons[i].addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
                     ((JButton)evt.getSource()).setForeground(new Color(200, 200, 200));
@@ -146,7 +137,6 @@ public class UserDashboard extends JFrame {
                 }
             });
 
-            // Navigation action
             final int index = i;
             navButtons[i].addActionListener(e -> {
                 updateActiveButton(index);
@@ -159,9 +149,54 @@ public class UserDashboard extends JFrame {
         // Set initial active button (MENU)
         updateActiveButton(0);
 
-        navBar.add(navContent, BorderLayout.WEST);
-        panel.add(navBar, BorderLayout.SOUTH);
+        // Right-aligned components (welcome + logout)
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+        rightPanel.setBackground(Color.BLACK);
+        rightPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 20));
 
+        // Welcome Label
+        JLabel navWelcomeLabel = new JLabel("Welcome, " + currentUser.getFullName() + "! ");
+        navWelcomeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        navWelcomeLabel.setForeground(new Color(220, 220, 220));
+        rightPanel.add(navWelcomeLabel);
+
+        // Logout Button
+        JButton logoutButton = new JButton("Logout");
+        logoutButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        logoutButton.setForeground(new Color(200, 200, 200));
+        logoutButton.setBackground(new Color(70, 70, 70));
+        logoutButton.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(100, 100, 100), 1),
+            BorderFactory.createEmptyBorder(5, 15, 5, 15)
+        ));
+        logoutButton.setFocusPainted(false);
+        logoutButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        // Hover effects
+        logoutButton.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                logoutButton.setForeground(Color.WHITE);
+                logoutButton.setBackground(new Color(90, 90, 90));
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                logoutButton.setForeground(new Color(200, 200, 200));
+                logoutButton.setBackground(new Color(70, 70, 70));
+            }
+        });
+
+        // Logout action
+        logoutButton.addActionListener(e -> {
+            new LoginForm().setVisible(true);
+            dispose();
+        });
+
+        rightPanel.add(logoutButton);
+
+        // Add components to navBar
+        navBar.add(navContent, BorderLayout.WEST);
+        navBar.add(rightPanel, BorderLayout.EAST);
+
+        panel.add(navBar, BorderLayout.SOUTH);
         return panel;
     }
 
