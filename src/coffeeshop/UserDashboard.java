@@ -6,6 +6,8 @@ package coffeeshop;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -70,32 +72,32 @@ public class UserDashboard extends JFrame {
         gifContainer.setBackground(Color.BLACK);
 
         // GIF Loading with Debugging
-        try {
-            URL gifUrl = getClass().getResource("/images/header-background2.gif");
-            System.out.println("Loading GIF from: " + gifUrl); // Debug
+        // Replace your existing GIF loading code with this
+    try {
+        File gifFile = new File("C:\\Users\\sophi\\Downloads\\images\\header-backgroundd.gif");
 
-            if (gifUrl != null) {
-                ImageIcon gifIcon = new ImageIcon(gifUrl);
-                JLabel gifLabel = new JLabel(gifIcon);
-                gifLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        if (gifFile.exists()) {
+            // Create ImageIcon directly from file path
+            ImageIcon gifIcon = new ImageIcon(gifFile.getAbsolutePath());
 
-                // Animation test
-                if (gifIcon.getImageLoadStatus() == MediaTracker.COMPLETE) {
-                    System.out.println("GIF loaded successfully: " 
-                        + gifIcon.getIconWidth() + "x" + gifIcon.getIconHeight());
-                    gifContainer.add(gifLabel, BorderLayout.CENTER);
-                } else {
-                    throw new IOException("GIF failed to load");
-                }
-            } else {
-                throw new NullPointerException("GIF URL is null");
-            }
-        } catch (Exception e) {
-            System.err.println("GIF Error: " + e.getMessage());
-            JLabel errorLabel = new JLabel("Header Image Missing", SwingConstants.CENTER);
-            errorLabel.setForeground(Color.RED);
-            gifContainer.add(errorLabel, BorderLayout.CENTER);
+            // Force the image to load completely before adding to container
+            Image img = gifIcon.getImage();
+            // This creates a new ImageIcon that's fully loaded
+            gifIcon = new ImageIcon(img);
+
+            JLabel gifLabel = new JLabel(gifIcon);
+            gifLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            gifContainer.add(gifLabel, BorderLayout.CENTER);
+        } else {
+            System.err.println("File does not exist: " + gifFile.getAbsolutePath());
+            throw new IOException("GIF file not found");
         }
+    } catch (Exception e) {
+        System.err.println("GIF Error: " + e.getMessage());
+        JLabel errorLabel = new JLabel("Header Image Missing", SwingConstants.CENTER);
+        errorLabel.setForeground(Color.RED);
+        gifContainer.add(errorLabel, BorderLayout.CENTER);
+    }
 
         panel.add(gifContainer, BorderLayout.CENTER);
 
