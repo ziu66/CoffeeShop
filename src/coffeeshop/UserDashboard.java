@@ -21,11 +21,18 @@ public class UserDashboard extends JFrame {
     private User currentUser;
     private JPanel contentPanel;
     private JButton[] navButtons;
-
+    
+    private List<CartItem> cartItems = new ArrayList<>();
+    private double cartTotal = 0.0;
+    private JLabel cartCounter;
+    private String selectedAddress;
+    
     public UserDashboard(User user) {
         this.currentUser = user;
         initializeUI();
     }
+    
+    
 
     private void initializeUI() {
         // Main panel with border layout
@@ -60,7 +67,7 @@ public class UserDashboard extends JFrame {
         panel.setBackground(Color.BLACK);
         panel.setPreferredSize(new Dimension(1200, 250));
 
-        // 1. Welcome Message (Top - optional, can remove if redundant)
+        // 1. Top Welcome Message (Optional)
         JLabel welcomeLabel = new JLabel("Welcome, " + currentUser.getFullName(), SwingConstants.CENTER);
         welcomeLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         welcomeLabel.setForeground(Color.WHITE);
@@ -90,7 +97,6 @@ public class UserDashboard extends JFrame {
             errorLabel.setForeground(Color.RED);
             gifContainer.add(errorLabel, BorderLayout.CENTER);
         }
-
         panel.add(gifContainer, BorderLayout.CENTER);
 
         // 3. Navigation Bar (Bottom)
@@ -115,10 +121,19 @@ public class UserDashboard extends JFrame {
             navContent.add(missingLogo);
         }
 
-        // Navigation Buttons
-        String[] navItems = {"MENU", "MERCHANDISE", "REWARDS"};
+        // Navigation Buttons with CART
+        String[] navItems = {"MENU", "MERCHANDISE", "REWARDS", "CART"};
         navButtons = new JButton[navItems.length];
 
+        // Cart item counter
+        cartCounter = new JLabel("0");
+        cartCounter.setFont(new Font("Arial", Font.BOLD, 10));
+        cartCounter.setForeground(Color.WHITE);
+        cartCounter.setBackground(new Color(255, 102, 102));
+        cartCounter.setOpaque(true);
+        cartCounter.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
+        cartCounter.setVisible(false);
+        
         for (int i = 0; i < navItems.length; i++) {
             navButtons[i] = new JButton(navItems[i]);
             navButtons[i].setForeground(Color.WHITE);
@@ -128,25 +143,57 @@ public class UserDashboard extends JFrame {
             navButtons[i].setContentAreaFilled(false);
             navButtons[i].setFocusPainted(false);
 
+            // Special cart button styling
+            if (navItems[i].equals("CART")) {
+                try {
+                    ImageIcon cartIcon = new ImageIcon(getClass().getResource("/images/cart-icon.png"));
+                    Image scaledCartIcon = cartIcon.getImage().getScaledInstance(20, 20, Image.SCALE_SMOOTH);
+                    navButtons[i].setIcon(new ImageIcon(scaledCartIcon));
+                    navButtons[i].setHorizontalTextPosition(SwingConstants.LEFT);
+                    navButtons[i].setIconTextGap(8);
+
+                    // Add cart counter
+                    JPanel cartPanel = new JPanel(new BorderLayout());
+                    cartPanel.setOpaque(false);
+                    cartPanel.add(navButtons[i], BorderLayout.CENTER);
+                    cartPanel.add(cartCounter, BorderLayout.NORTH);
+                    navContent.add(cartPanel);
+                    continue;
+                } catch (Exception e) {
+                    System.err.println("Couldn't load cart icon: " + e.getMessage());
+                }
+            }
+
+            // Hover effects
             navButtons[i].addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
-                    ((JButton)evt.getSource()).setForeground(new Color(200, 200, 200));
+                    JButton source = (JButton)evt.getSource();
+                    source.setForeground(new Color(200, 200, 200));
+                    if (source.getText().equals("CART")) {
+                        source.setBorder(BorderFactory.createLineBorder(new Color(255, 215, 0), 1));
+                    }
                 }
                 public void mouseExited(java.awt.event.MouseEvent evt) {
-                    ((JButton)evt.getSource()).setForeground(Color.WHITE);
+                    JButton source = (JButton)evt.getSource();
+                    source.setForeground(Color.WHITE);
+                    source.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
                 }
             });
 
             final int index = i;
             navButtons[i].addActionListener(e -> {
-                updateActiveButton(index);
-                handleNavigation(navItems[index]);
+                if (navItems[index].equals("CART")) {
+                    showCart();
+                } else {
+                    updateActiveButton(index);
+                    handleNavigation(navItems[index]);
+                }
             });
 
             navContent.add(navButtons[i]);
         }
 
-        // Set initial active button (MENU)
+        // Set initial active button
         updateActiveButton(0);
 
         // Right-aligned components (welcome + logout)
@@ -184,7 +231,6 @@ public class UserDashboard extends JFrame {
             }
         });
 
-        // Logout action
         logoutButton.addActionListener(e -> {
             new LoginForm().setVisible(true);
             dispose();
@@ -200,6 +246,323 @@ public class UserDashboard extends JFrame {
         return panel;
     }
 
+    // Method to update cart counter
+    public void updateCartCounter(int itemCount) {
+        if (cartCounter != null) {
+            cartCounter.setText(String.valueOf(itemCount));
+            cartCounter.setVisible(itemCount > 0);
+        }
+    }
+
+    // Method to show cart contents
+    private void showCart() {
+        JFrame cartFrame = new JFrame("Shopping Cart (" + getSelectedItemCount() + ")");
+        cartFrame.setSize(600, 700);
+        cartFrame.setLocationRelativeTo(this);
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        // Title panel with item count
+        JPanel titlePanel = new JPanel(new BorderLayout());
+        JLabel titleLabel = new JLabel("Your Cart", JLabel.LEFT);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        titlePanel.add(titleLabel, BorderLayout.WEST);
+
+        JLabel itemCountLabel = new JLabel(getSelectedItemCount() + " items selected");
+        itemCountLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        titlePanel.add(itemCountLabel, BorderLayout.EAST);
+        mainPanel.add(titlePanel, BorderLayout.NORTH);
+
+        // Cart items panel with checkboxes and quantities
+        JPanel itemsPanel = new JPanel();
+        itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS));
+
+        if (cartItems.isEmpty()) {
+            itemsPanel.add(new JLabel("Your cart is empty", SwingConstants.CENTER));
+        } else {
+            for (CartItem cartItem : cartItems) {
+                JPanel itemPanel = new JPanel(new BorderLayout());
+                itemPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
+
+                // Checkbox for selection
+                JCheckBox selectBox = new JCheckBox("", cartItem.selected);
+                selectBox.addActionListener(e -> {
+                    cartItem.selected = selectBox.isSelected();
+                    updateCartDisplay(cartFrame, itemCountLabel);
+                });
+
+                // Item details
+                JPanel detailsPanel = new JPanel(new BorderLayout());
+
+                // Name and description
+                JLabel nameLabel = new JLabel(cartItem.item.getName());
+                nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+
+                JLabel descLabel = new JLabel("Size: Regular"); // Example attribute
+                descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+                JPanel textPanel = new JPanel();
+                textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
+                textPanel.add(nameLabel);
+                textPanel.add(descLabel);
+
+                // Price and quantity controls
+                JPanel pricePanel = new JPanel(new BorderLayout());
+
+                JLabel priceLabel = new JLabel("$" + String.format("%.2f", cartItem.item.getPrice()));
+                priceLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+
+                JPanel quantityPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+                JButton minusBtn = new JButton("-");
+                minusBtn.addActionListener(e -> {
+                    if (cartItem.quantity > 1) {
+                        cartItem.quantity--;
+                        updateCartDisplay(cartFrame, itemCountLabel);
+                    }
+                });
+
+                JLabel qtyLabel = new JLabel(String.valueOf(cartItem.quantity));
+
+                JButton plusBtn = new JButton("+");
+                plusBtn.addActionListener(e -> {
+                    cartItem.quantity++;
+                    updateCartDisplay(cartFrame, itemCountLabel);
+                });
+
+                quantityPanel.add(minusBtn);
+                quantityPanel.add(qtyLabel);
+                quantityPanel.add(plusBtn);
+
+                pricePanel.add(priceLabel, BorderLayout.NORTH);
+                pricePanel.add(quantityPanel, BorderLayout.SOUTH);
+
+                // Remove button
+                JButton removeBtn = new JButton("Remove");
+                removeBtn.addActionListener(e -> {
+                    cartItems.remove(cartItem);
+                    updateCartDisplay(cartFrame, itemCountLabel);
+                    if (cartItems.isEmpty()) {
+                        cartFrame.dispose();
+                    }
+                });
+
+                // Layout components
+                JPanel leftPanel = new JPanel(new BorderLayout(10, 0));
+                leftPanel.add(selectBox, BorderLayout.WEST);
+                leftPanel.add(textPanel, BorderLayout.CENTER);
+
+                JPanel rightPanel = new JPanel(new BorderLayout());
+                rightPanel.add(pricePanel, BorderLayout.CENTER);
+                rightPanel.add(removeBtn, BorderLayout.SOUTH);
+
+                itemPanel.add(leftPanel, BorderLayout.WEST);
+                itemPanel.add(rightPanel, BorderLayout.EAST);
+                itemsPanel.add(itemPanel);
+                itemsPanel.add(new JSeparator());
+            }
+        }
+
+        JScrollPane scrollPane = new JScrollPane(itemsPanel);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+
+        // Checkout panel with total and proceed button
+        JPanel checkoutPanel = new JPanel(new BorderLayout());
+        checkoutPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+
+        JLabel totalLabel = new JLabel("Selected Total: $" + String.format("%.2f", calculateSelectedTotal()));
+        totalLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+
+        // PROCEED TO CHECKOUT BUTTON - CONNECTED TO showCheckout()
+        JButton checkoutBtn = new JButton("Proceed to Checkout");
+        checkoutBtn.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        checkoutBtn.setBackground(new Color(76, 175, 80)); // Green
+        checkoutBtn.setForeground(Color.WHITE);
+        checkoutBtn.addActionListener(e -> {
+            if (hasSelectedItems()) {
+                cartFrame.setVisible(false); // Hide cart window
+                showCheckout(cartFrame); // THIS IS THE CONNECTION
+            } else {
+                JOptionPane.showMessageDialog(cartFrame,
+                    "Please select at least one item to checkout",
+                    "No Items Selected", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
+        checkoutPanel.add(totalLabel, BorderLayout.WEST);
+        checkoutPanel.add(checkoutBtn, BorderLayout.EAST);
+        mainPanel.add(checkoutPanel, BorderLayout.SOUTH);
+
+        cartFrame.add(mainPanel);
+        cartFrame.setVisible(true);
+    }
+
+    // Helper methods used in showCart()
+    private int getSelectedItemCount() {
+        return cartItems.stream()
+                       .filter(item -> item.selected)
+                       .mapToInt(item -> item.quantity)
+                       .sum();
+    }
+
+    private double calculateSelectedTotal() {
+        return cartItems.stream()
+                       .filter(item -> item.selected)
+                       .mapToDouble(item -> item.item.getPrice() * item.quantity)
+                       .sum();
+    }
+
+    private boolean hasSelectedItems() {
+        return cartItems.stream().anyMatch(item -> item.selected);
+    }
+
+    private void updateCartDisplay(JFrame cartFrame, JLabel itemCountLabel) {
+        itemCountLabel.setText(getSelectedItemCount() + " items selected");
+        cartFrame.setTitle("Shopping Cart (" + getSelectedItemCount() + ")");
+        // You could also update the total label here if needed
+    }
+    
+    private void calculateTotal() {
+        cartTotal = 0.0;
+        for (CartItem item : cartItems) {
+            if (item.selected) {
+                cartTotal += item.item.getPrice() * item.quantity;
+            }
+        }
+        updateCartCounter();
+    }
+
+    private void updateCartCounter() {
+        int count = cartItems.stream()
+                     .filter(item -> item.selected)
+                     .mapToInt(item -> item.quantity)
+                     .sum();
+        cartCounter.setText(String.valueOf(count));
+        cartCounter.setVisible(count > 0);
+    }
+    
+    private void showCheckout(JFrame parentFrame) {
+        JFrame checkoutFrame = new JFrame("Checkout");
+        checkoutFrame.setSize(600, 700);
+        checkoutFrame.setLocationRelativeTo(parentFrame);
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        // Title
+        JLabel titleLabel = new JLabel("Order Summary", JLabel.LEFT);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        mainPanel.add(titleLabel, BorderLayout.NORTH);
+
+        // Delivery/Pickup options
+        JPanel deliveryPanel = new JPanel();
+        deliveryPanel.setLayout(new BoxLayout(deliveryPanel, BoxLayout.Y_AXIS));
+        deliveryPanel.setBorder(BorderFactory.createTitledBorder("Delivery Method"));
+
+        ButtonGroup deliveryGroup = new ButtonGroup();
+        JRadioButton deliveryBtn = new JRadioButton("Delivery");
+        JRadioButton pickupBtn = new JRadioButton("Pickup");
+        deliveryGroup.add(deliveryBtn);
+        deliveryGroup.add(pickupBtn);
+        deliveryBtn.setSelected(true);
+
+        // Address input
+        JPanel addressPanel = new JPanel(new BorderLayout());
+        JLabel addressLabel = new JLabel("Delivery Address:");
+        JTextArea addressField = new JTextArea(currentUser.getAddress());
+        addressField.setLineWrap(true);
+        addressField.setRows(3);
+
+        // Show/hide address based on selection
+        deliveryBtn.addActionListener(e -> addressPanel.setVisible(true));
+        pickupBtn.addActionListener(e -> addressPanel.setVisible(false));
+
+        addressPanel.add(addressLabel, BorderLayout.NORTH);
+        addressPanel.add(new JScrollPane(addressField), BorderLayout.CENTER);
+
+        deliveryPanel.add(deliveryBtn);
+        deliveryPanel.add(pickupBtn);
+        deliveryPanel.add(addressPanel);
+
+        // Order summary
+        JPanel summaryPanel = new JPanel();
+        summaryPanel.setLayout(new BoxLayout(summaryPanel, BoxLayout.Y_AXIS));
+
+        double subtotal = calculateSelectedItems();
+        double shipping = 105.00; // Example shipping fee
+
+        summaryPanel.add(new JLabel("Subtotal: P" + String.format("%.2f", subtotal)));
+        summaryPanel.add(new JLabel("Shipping: P" + String.format("%.2f", shipping)));
+        summaryPanel.add(new JSeparator());
+        summaryPanel.add(new JLabel("Total: P" + String.format("%.2f", subtotal + shipping)));
+
+        // Payment options
+        JPanel paymentPanel = new JPanel();
+        paymentPanel.setLayout(new BoxLayout(paymentPanel, BoxLayout.Y_AXIS));
+        paymentPanel.setBorder(BorderFactory.createTitledBorder("Payment Method"));
+
+        ButtonGroup paymentGroup = new ButtonGroup();
+        JRadioButton codBtn = new JRadioButton("Cash on Delivery");
+        JRadioButton cardBtn = new JRadioButton("Credit/Debit Card");
+        JRadioButton gcashBtn = new JRadioButton("GCash");
+        paymentGroup.add(codBtn);
+        paymentGroup.add(cardBtn);
+        paymentGroup.add(gcashBtn);
+        codBtn.setSelected(true);
+
+        paymentPanel.add(codBtn);
+        paymentPanel.add(cardBtn);
+        paymentPanel.add(gcashBtn);
+
+        // Confirm order button
+        JButton confirmBtn = new JButton("Place Order");
+        confirmBtn.addActionListener(e -> {
+            selectedAddress = deliveryBtn.isSelected() ? addressField.getText() : "PICKUP";
+            String paymentMethod = codBtn.isSelected() ? "COD" : 
+                                 cardBtn.isSelected() ? "Credit Card" : "GCash";
+
+            // Process order here
+            JOptionPane.showMessageDialog(checkoutFrame, 
+                "Order confirmed!\n" +
+                "Delivery: " + (deliveryBtn.isSelected() ? selectedAddress : "Store Pickup") + "\n" +
+                "Payment: " + paymentMethod + "\n" +
+                "Total: P" + String.format("%.2f", subtotal + shipping),
+                "Order Confirmed", JOptionPane.INFORMATION_MESSAGE);
+
+            // Remove selected items
+            cartItems.removeIf(item -> item.selected);
+            calculateTotal();
+            checkoutFrame.dispose();
+            parentFrame.dispose();
+        });
+
+        // Layout
+        JPanel centerPanel = new JPanel();
+        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+        centerPanel.add(deliveryPanel);
+        centerPanel.add(Box.createVerticalStrut(20));
+        centerPanel.add(summaryPanel);
+        centerPanel.add(Box.createVerticalStrut(20));
+        centerPanel.add(paymentPanel);
+
+        mainPanel.add(centerPanel, BorderLayout.CENTER);
+        mainPanel.add(confirmBtn, BorderLayout.SOUTH);
+
+        checkoutFrame.add(mainPanel);
+        checkoutFrame.setVisible(true);
+    }
+   
+
+    private double calculateSelectedItems() {
+        double subtotal = 0.0;
+        for (CartItem item : cartItems) {
+            if (item.selected) {
+                subtotal += item.item.getPrice() * item.quantity;
+            }
+        }
+        return subtotal;
+    }
+    
     private void updateActiveButton(int activeIndex) {
         for (int i = 0; i < navButtons.length; i++) {
             if (i == activeIndex) {
@@ -378,13 +741,35 @@ public class UserDashboard extends JFrame {
         
         return button;
     }
-
+    
     private void addToCart(MenuItem item) {
-        JOptionPane.showMessageDialog(this, 
-            item.getName() + " added to cart!", 
-            "Success", JOptionPane.INFORMATION_MESSAGE);
-    }
+        // Check if item already in cart
+        for (CartItem cartItem : cartItems) {
+            if (cartItem.item.getName().equals(item.getName())) {
+                cartItem.quantity++;
+                cartTotal += item.getPrice();
+                updateCartCounter();
+                return;
+            }
+        }
 
+        // Add new item
+        cartItems.add(new CartItem(item));
+        cartTotal += item.getPrice();
+        updateCartCounter();
+    }
+    
+    private class CartItem {
+    MenuItem item;
+    int quantity;
+    boolean selected;
+    
+    public CartItem(MenuItem item) {
+        this.item = item;
+        this.quantity = 1;
+        this.selected = true;
+    }
+}
     // Sample data methods
     private List<MenuItem> createSampleDrinks() {
         List<MenuItem> drinks = new ArrayList<>();
