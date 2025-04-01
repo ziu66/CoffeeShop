@@ -13,6 +13,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import javax.imageio.ImageIO;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class UserDashboard extends JFrame {
     private JPanel mainPanel;
@@ -28,12 +32,41 @@ public class UserDashboard extends JFrame {
     private String selectedAddress;
     private int currentCartId = -1;
     
+    // Class to represent menu items
+    private static class MenuItem {
+        private int productId;
+        private String name;
+        private double price;
+
+        public MenuItem(int productId, String name, double price) {
+            this.productId = productId;
+            this.name = name;
+            this.price = price;
+        }
+
+        public int getProductId() { return productId; }
+        public String getName() { return name; }
+        public double getPrice() { return price; }
+    }
+    
+    // Class to represent items in the cart
+    private class CartItem {
+        MenuItem item;
+        int quantity;
+        boolean selected;
+
+        public CartItem(MenuItem item) {
+            this.item = item;
+            this.quantity = 1;
+            this.selected = true;
+        }
+    }
+    
     public UserDashboard(User user) {
         this.currentUser = user;
         initializeUI();
-        loadCartItems(); // Add this line to load saved cart
+        loadCartItems(); // Load saved cart
     }
-    
 
     private void initializeUI() {
         // Main panel with border layout
@@ -248,59 +281,73 @@ public class UserDashboard extends JFrame {
     }
     
     private int getOrCreateCart() {
-    if (currentCartId != -1) return currentCartId;
-    
-    String sql = "SELECT cart_id FROM carts WHERE user_id = ?";
-    try (Connection conn = DBConnection.getConnection();
-         PreparedStatement stmt = conn.prepareStatement(sql)) {
-         
-        stmt.setInt(1, currentUser.getUserId());
-        ResultSet rs = stmt.executeQuery();
+        if (currentCartId != -1) return currentCartId;
         
-        if (rs.next()) {
-            currentCartId = rs.getInt("cart_id");
-            return currentCartId;
-        }
-    } catch (SQLException e) {
-        e.printStackTrace();
-    }
-    
-    // If no cart exists, create one
-    String insertSql = "INSERT INTO carts (user_id) VALUES (?)";
-    try (Connection conn = DBConnection.getConnection();
-         PreparedStatement stmt = conn.prepareStatement(insertSql, PreparedStatement.RETURN_GENERATED_KEYS)) {
-         
-        stmt.setInt(1, currentUser.getUserId());
-        stmt.executeUpdate();
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
         
-        ResultSet rs = stmt.getGeneratedKeys();
-        if (rs.next()) {
-            currentCartId = rs.getInt(1);
-            return currentCartId;
+        try {
+            conn = DBConnection.getConnection();
+            String sql = "SELECT cart_id FROM carts WHERE user_id = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, currentUser.getUserId());
+            rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                currentCartId = rs.getInt("cart_id");
+                return currentCartId;
+            }
+            
+            // If no cart exists, create one
+            String insertSql = "INSERT INTO carts (user_id) VALUES (?)";
+            stmt = conn.prepareStatement(insertSql, PreparedStatement.RETURN_GENERATED_KEYS);
+            stmt.setInt(1, currentUser.getUserId());
+            stmt.executeUpdate();
+            
+            rs = stmt.getGeneratedKeys();
+            if (rs.next()) {
+                currentCartId = rs.getInt(1);
+                return currentCartId;
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error accessing cart: " + e.getMessage(), 
+                "Database Error", 
+                JOptionPane.ERROR_MESSAGE);
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
-    } catch (SQLException e) {
-        e.printStackTrace();
+        
+        return -1; // Error case
     }
-    
-    return -1; // Error case
-}
 
-// 2. Method to load cart items from database
+    // Method to load cart items from database
     private void loadCartItems() {
         cartItems.clear();
         int cartId = getOrCreateCart();
         if (cartId == -1) return;
 
-        String sql = "SELECT p.product_id, p.name, p.price, ci.quantity " +
-                    "FROM cart_items ci " +
-                    "JOIN products p ON ci.product_id = p.product_id " +
-                    "WHERE ci.cart_id = ?";
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            String sql = "SELECT p.product_id, p.name, p.price, ci.quantity " +
+                        "FROM cart_items ci " +
+                        "JOIN products p ON ci.product_id = p.product_id " +
+                        "WHERE ci.cart_id = ?";
+                        
+            stmt = conn.prepareStatement(sql);
             stmt.setInt(1, cartId);
-            ResultSet rs = stmt.executeQuery();
+            rs = stmt.executeQuery();
 
             while (rs.next()) {
                 MenuItem item = new MenuItem(
@@ -312,34 +359,40 @@ public class UserDashboard extends JFrame {
                 cartItem.quantity = rs.getInt("quantity");
                 cartItems.add(cartItem);
             }
-            updateCartCounter();
+            updateCartTotalAndCounter();
         } catch (SQLException e) {
-            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, 
+                "Error loading cart items: " + e.getMessage(), 
+                "Database Error", 
+                JOptionPane.ERROR_MESSAGE);
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
-    // 3. Update your MenuItem class (inside UserDashboard)
-    private static class MenuItem {
-        private int productId;
-        private String name;
-        private double price;
-
-        public MenuItem(int productId, String name, double price) {
-            this.productId = productId;
-            this.name = name;
-            this.price = price;
+    // Method to update cart counter display
+    private void updateCartTotalAndCounter() {
+        // Calculate total
+        cartTotal = 0.0;
+        int count = 0;
+        
+        for (CartItem item : cartItems) {
+            if (item.selected) {
+                cartTotal += item.item.getPrice() * item.quantity;
+                count += item.quantity;
+            }
         }
-
-        public int getProductId() { return productId; }
-        public String getName() { return name; }
-        public double getPrice() { return price; }
-    }
-
-    // Method to update cart counter
-    public void updateCartCounter(int itemCount) {
+        
+        // Update counter display
         if (cartCounter != null) {
-            cartCounter.setText(String.valueOf(itemCount));
-            cartCounter.setVisible(itemCount > 0);
+            cartCounter.setText(String.valueOf(count));
+            cartCounter.setVisible(count > 0);
         }
     }
 
@@ -407,6 +460,7 @@ public class UserDashboard extends JFrame {
                 minusBtn.addActionListener(e -> {
                     if (cartItem.quantity > 1) {
                         cartItem.quantity--;
+                        updateCartItemQuantity(cartItem.item.getProductId(), cartItem.quantity);
                         updateCartDisplay(cartFrame, itemCountLabel);
                     }
                 });
@@ -416,6 +470,7 @@ public class UserDashboard extends JFrame {
                 JButton plusBtn = new JButton("+");
                 plusBtn.addActionListener(e -> {
                     cartItem.quantity++;
+                    updateCartItemQuantity(cartItem.item.getProductId(), cartItem.quantity);
                     updateCartDisplay(cartFrame, itemCountLabel);
                 });
 
@@ -429,7 +484,9 @@ public class UserDashboard extends JFrame {
                 // Remove button
                 JButton removeBtn = new JButton("Remove");
                 removeBtn.addActionListener(e -> {
+                    removeCartItem(cartItem.item.getProductId());
                     cartItems.remove(cartItem);
+                    updateCartTotalAndCounter();
                     updateCartDisplay(cartFrame, itemCountLabel);
                     if (cartItems.isEmpty()) {
                         cartFrame.dispose();
@@ -506,28 +563,10 @@ public class UserDashboard extends JFrame {
     }
 
     private void updateCartDisplay(JFrame cartFrame, JLabel itemCountLabel) {
-        itemCountLabel.setText(getSelectedItemCount() + " items selected");
-        cartFrame.setTitle("Shopping Cart (" + getSelectedItemCount() + ")");
-        // You could also update the total label here if needed
-    }
-    
-    private void calculateTotal() {
-        cartTotal = 0.0;
-        for (CartItem item : cartItems) {
-            if (item.selected) {
-                cartTotal += item.item.getPrice() * item.quantity;
-            }
-        }
-        updateCartCounter();
-    }
-
-    private void updateCartCounter() {
-        int count = cartItems.stream()
-                     .filter(item -> item.selected)
-                     .mapToInt(item -> item.quantity)
-                     .sum();
-        cartCounter.setText(String.valueOf(count));
-        cartCounter.setVisible(count > 0);
+        int selectedCount = getSelectedItemCount();
+        itemCountLabel.setText(selectedCount + " items selected");
+        cartFrame.setTitle("Shopping Cart (" + selectedCount + ")");
+        updateCartTotalAndCounter();
     }
     
     private void showCheckout(JFrame parentFrame) {
@@ -577,7 +616,7 @@ public class UserDashboard extends JFrame {
         JPanel summaryPanel = new JPanel();
         summaryPanel.setLayout(new BoxLayout(summaryPanel, BoxLayout.Y_AXIS));
 
-        double subtotal = calculateSelectedItems();
+        double subtotal = calculateSelectedTotal();
         double shipping = 105.00; // Example shipping fee
 
         summaryPanel.add(new JLabel("Subtotal: P" + String.format("%.2f", subtotal)));
@@ -618,9 +657,10 @@ public class UserDashboard extends JFrame {
                 "Total: P" + String.format("%.2f", subtotal + shipping),
                 "Order Confirmed", JOptionPane.INFORMATION_MESSAGE);
 
-            // Remove selected items
-            cartItems.removeIf(item -> item.selected);
-            calculateTotal();
+            // Process the checkout in database
+            processCheckout();
+            
+            // Close windows
             checkoutFrame.dispose();
             parentFrame.dispose();
         });
@@ -642,32 +682,54 @@ public class UserDashboard extends JFrame {
     }
    
     private void processCheckout() {
-        // After successful payment processing:
-        String sql = "DELETE FROM cart_items WHERE cart_id = ?";
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            
+            // Start transaction
+            conn.setAutoCommit(false);
+            
+            // 1. Create order record
+            // Implement order creation logic here
+            
+            // 2. Remove items from cart
+            String sql = "DELETE FROM cart_items WHERE cart_id = ?";
+            stmt = conn.prepareStatement(sql);
             stmt.setInt(1, getOrCreateCart());
             stmt.executeUpdate();
-
+            
+            // Commit transaction
+            conn.commit();
+            
             // Clear local cart
             cartItems.clear();
-            updateCartCounter();
+            updateCartTotalAndCounter();
+            
         } catch (SQLException e) {
-            e.printStackTrace();
+            try {
+                if (conn != null) conn.rollback();
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
+            JOptionPane.showMessageDialog(this,
+                "Error processing order: " + e.getMessage(),
+                "Checkout Error",
+                JOptionPane.ERROR_MESSAGE);
+        } finally {
+            try {
+                if (stmt != null) stmt.close();
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
-    private double calculateSelectedItems() {
-        double subtotal = 0.0;
-        for (CartItem item : cartItems) {
-            if (item.selected) {
-                subtotal += item.item.getPrice() * item.quantity;
-            }
-        }
-        return subtotal;
-    }
-    
     private void updateActiveButton(int activeIndex) {
         for (int i = 0; i < navButtons.length; i++) {
             if (i == activeIndex) {
@@ -714,369 +776,510 @@ public class UserDashboard extends JFrame {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 40, 20, 40));
 
-        // Load drinks
-        List<MenuItem> drinks = getDatabaseDrinks();
-        if (!drinks.isEmpty()) {
-            panel.add(createCategorySection("Drinks", drinks));
-            panel.add(Box.createRigidArea(new Dimension(0, 30)));
-        } else {
-            System.out.println("No drinks found in database"); // Debug
-        }
+        // Add section header
+        JLabel headerLabel = new JLabel("Our Menu");
+        headerLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        headerLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(headerLabel);
+        panel.add(Box.createVerticalStrut(20));
 
-        // Load food
-        List<MenuItem> food = getDatabaseFood();
-        if (!food.isEmpty()) {
-            panel.add(createCategorySection("Food", food));
-        } else {
-            System.out.println("No food found in database"); // Debug
+        // Categories
+        String[] categories = {"Hot Coffee", "Cold Coffee", "Tea", "Pastries"};
+        
+        // Fetch menu items from database
+        for (String category : categories) {
+            JPanel categoryPanel = createCategoryPanel(category, getMenuItemsByCategory(category));
+            panel.add(categoryPanel);
+            panel.add(Box.createVerticalStrut(30));
         }
 
         return panel;
     }
 
+    private JPanel createCategoryPanel(String category, List<MenuItem> items) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(Color.WHITE);
+        
+        // Category header
+        JLabel categoryLabel = new JLabel(category);
+        categoryLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        categoryLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(categoryLabel);
+        panel.add(Box.createVerticalStrut(10));
+        
+        // Add divider
+        JSeparator separator = new JSeparator();
+        separator.setMaximumSize(new Dimension(Short.MAX_VALUE, 1));
+        panel.add(separator);
+        panel.add(Box.createVerticalStrut(15));
+        
+        // Grid of items
+        JPanel itemsGrid = new JPanel(new GridLayout(0, 3, 20, 20));
+        itemsGrid.setBackground(Color.WHITE);
+        
+        if (items.isEmpty()) {
+            JLabel noItemsLabel = new JLabel("No items available in this category");
+            noItemsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            panel.add(noItemsLabel);
+        } else {
+            for (MenuItem item : items) {
+                JPanel itemPanel = createItemPanel(item);
+                itemsGrid.add(itemPanel);
+            }
+        }
+        
+        panel.add(itemsGrid);
+        return panel;
+    }
+    
+    private JPanel createItemPanel(MenuItem item) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BorderLayout());
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(220, 220, 220), 1),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        
+        // Try to load product image
+        JLabel imageLabel = new JLabel(new ImageIcon(getClass().getResource("/images/placeholder.png")));
+        try {
+            BufferedImage image = ImageIO.read(new File("C:\\Users\\sophi\\Downloads\\images\\products\\" + 
+                                              item.getProductId() + ".jpg"));
+            if (image != null) {
+                Image scaledImage = image.getScaledInstance(120, 120, Image.SCALE_SMOOTH);
+                imageLabel = new JLabel(new ImageIcon(scaledImage));
+            }
+        } catch (IOException e) {
+            System.err.println("Could not load image for product ID " + item.getProductId());
+        }
+        
+        // Center the image
+        JPanel imagePanel = new JPanel();
+        imagePanel.setBackground(Color.WHITE);
+        imagePanel.add(imageLabel);
+        
+        // Item info
+        JPanel infoPanel = new JPanel();
+        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+        infoPanel.setBackground(Color.WHITE);
+        
+        JLabel nameLabel = new JLabel(item.getName());
+        nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        
+        JLabel priceLabel = new JLabel("P" + String.format("%.2f", item.getPrice()));
+        priceLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        
+        infoPanel.add(nameLabel);
+        infoPanel.add(Box.createVerticalStrut(5));
+        infoPanel.add(priceLabel);
+        
+        // Add to cart button
+        JButton addButton = new JButton("Add to Cart");
+        addButton.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        addButton.setBackground(new Color(76, 175, 80)); // Green
+        addButton.setForeground(Color.WHITE);
+        addButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addButton.addActionListener(e -> addToCart(item));
+        
+        panel.add(imagePanel, BorderLayout.CENTER);
+        panel.add(infoPanel, BorderLayout.SOUTH);
+        panel.add(addButton, BorderLayout.EAST);
+        
+        return panel;
+    }
+    
+    private List<MenuItem> getMenuItemsByCategory(String category) {
+        List<MenuItem> items = new ArrayList<>();
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            String sql = "SELECT product_id, name, price FROM products WHERE category = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setString(1, category);
+            rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                items.add(new MenuItem(
+                    rs.getInt("product_id"),
+                    rs.getString("name"),
+                    rs.getDouble("price")
+                ));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error loading menu items: " + e.getMessage());
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        return items;
+    }
+    
+    private void addToCart(MenuItem item) {
+        // Check if item already exists in cart
+        for (CartItem cartItem : cartItems) {
+            if (cartItem.item.getProductId() == item.getProductId()) {
+                cartItem.quantity++;
+                updateCartItemQuantity(item.getProductId(), cartItem.quantity);
+                JOptionPane.showMessageDialog(this, 
+                    "Added another " + item.getName() + " to your cart.",
+                    "Added to Cart", 
+                    JOptionPane.INFORMATION_MESSAGE);
+                updateCartTotalAndCounter();
+                return;
+            }
+        }
+        
+        // Add new item to cart
+        CartItem newItem = new CartItem(item);
+        cartItems.add(newItem);
+        
+        // Save to database
+        saveCartItem(item.getProductId(), 1);
+        
+        JOptionPane.showMessageDialog(this, 
+            item.getName() + " added to cart.",
+            "Added to Cart", 
+            JOptionPane.INFORMATION_MESSAGE);
+        
+        updateCartTotalAndCounter();
+    }
+    
+    private void saveCartItem(int productId, int quantity) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            String sql = "INSERT INTO cart_items (cart_id, product_id, quantity) VALUES (?, ?, ?)";
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, getOrCreateCart());
+            stmt.setInt(2, productId);
+            stmt.setInt(3, quantity);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error saving cart item: " + e.getMessage(), 
+                "Database Error", 
+                JOptionPane.ERROR_MESSAGE);
+        } finally {
+            try {
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    
+    private void updateCartItemQuantity(int productId, int quantity) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            String sql = "UPDATE cart_items SET quantity = ? WHERE cart_id = ? AND product_id = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, quantity);
+            stmt.setInt(2, getOrCreateCart());
+            stmt.setInt(3, productId);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error updating cart item: " + e.getMessage(), 
+                "Database Error", 
+                JOptionPane.ERROR_MESSAGE);
+        } finally {
+            try {
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    
+    private void removeCartItem(int productId) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            String sql = "DELETE FROM cart_items WHERE cart_id = ? AND product_id = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, getOrCreateCart());
+            stmt.setInt(2, productId);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error removing cart item: " + e.getMessage(), 
+                "Database Error", 
+                JOptionPane.ERROR_MESSAGE);
+        } finally {
+            try {
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    
     private JPanel createMerchandiseContent() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        List<MenuItem> merchandise = getDatabaseMerchandise();
-        if (!merchandise.isEmpty()) {
-            panel.add(createCategorySection("Merchandise", merchandise));
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 40, 20, 40));
+        
+        // Add section header
+        JLabel headerLabel = new JLabel("Merchandise");
+        headerLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        headerLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(headerLabel);
+        panel.add(Box.createVerticalStrut(20));
+        
+        // Merchandise description
+        JLabel descLabel = new JLabel("<html>Explore our exclusive collection of merchandise. " +
+                                     "Wear your favorite coffee brand with pride!</html>");
+        descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        descLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(descLabel);
+        panel.add(Box.createVerticalStrut(30));
+        
+        // Merchandise items from database
+        List<MenuItem> merchandiseItems = getMerchandiseItems();
+        JPanel itemsGrid = new JPanel(new GridLayout(0, 3, 20, 20));
+        itemsGrid.setBackground(Color.WHITE);
+        
+        if (merchandiseItems.isEmpty()) {
+            JLabel noItemsLabel = new JLabel("No merchandise available at this time");
+            noItemsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            panel.add(noItemsLabel);
         } else {
-            panel.add(new JLabel("No merchandise available"));
-            System.out.println("No merchandise found in database"); // Debug
+            for (MenuItem item : merchandiseItems) {
+                JPanel itemPanel = createItemPanel(item);
+                itemsGrid.add(itemPanel);
+            }
         }
-
+        
+        panel.add(itemsGrid);
         return panel;
     }
-
+    
+    private List<MenuItem> getMerchandiseItems() {
+        List<MenuItem> items = new ArrayList<>();
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            String sql = "SELECT product_id, name, price FROM products WHERE category = 'Merchandise'";
+            stmt = conn.prepareStatement(sql);
+            rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                items.add(new MenuItem(
+                    rs.getInt("product_id"),
+                    rs.getString("name"),
+                    rs.getDouble("price")
+                ));
+            }
+        } catch (SQLException e) {
+            System.err.println("Error loading merchandise items: " + e.getMessage());
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        return items;
+    }
     
     private JPanel createRewardsContent() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        // Rewards information
-        JLabel rewardsLabel = new JLabel("Your Rewards");
-        rewardsLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 40, 20, 40));
+        
+        // Add section header
+        JLabel headerLabel = new JLabel("Rewards Program");
+        headerLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        headerLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(headerLabel);
+        panel.add(Box.createVerticalStrut(20));
+        
+        // User points
+        int userPoints = getUserPoints();
+        JLabel pointsLabel = new JLabel("Your current points: " + userPoints);
+        pointsLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        pointsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(pointsLabel);
+        panel.add(Box.createVerticalStrut(30));
+        
+        // Program description
+        JPanel descPanel = new JPanel();
+        descPanel.setLayout(new BoxLayout(descPanel, BoxLayout.Y_AXIS));
+        descPanel.setBackground(new Color(245, 245, 245));
+        descPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        
+        JLabel howItWorksLabel = new JLabel("How It Works:");
+        howItWorksLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        
+        JTextArea descText = new JTextArea(
+            "• Earn 1 point for every P50 spent\n" +
+            "• Redeem 100 points for a free regular drink\n" +
+            "• Redeem 200 points for a free premium drink\n" +
+            "• Special birthday reward - double points all month!"
+        );
+        descText.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        descText.setBackground(new Color(245, 245, 245));
+        descText.setEditable(false);
+        descText.setLineWrap(true);
+        descText.setWrapStyleWord(true);
+        
+        descPanel.add(howItWorksLabel);
+        descPanel.add(Box.createVerticalStrut(10));
+        descPanel.add(descText);
+        
+        panel.add(descPanel);
+        panel.add(Box.createVerticalStrut(30));
+        
+        // Available rewards
+        JLabel rewardsLabel = new JLabel("Available Rewards");
+        rewardsLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
         rewardsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(rewardsLabel);
-        panel.add(Box.createRigidArea(new Dimension(0, 20)));
-
-        JLabel pointsLabel = new JLabel("Points: 150");
-        pointsLabel.setFont(new Font("Arial", Font.PLAIN, 18));
-        pointsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        panel.add(pointsLabel);
-
+        panel.add(Box.createVerticalStrut(10));
+        
+        // Rewards grid
+        JPanel rewardsGrid = new JPanel(new GridLayout(0, 2, 15, 15));
+        rewardsGrid.setBackground(Color.WHITE);
+        
+        String[][] rewards = {
+            {"Free Regular Coffee", "100"},
+            {"Free Premium Coffee", "200"},
+            {"50% Off Pastry", "75"},
+            {"Free Merchandise Item", "500"}
+        };
+        
+        for (String[] reward : rewards) {
+            JPanel rewardPanel = createRewardPanel(reward[0], Integer.parseInt(reward[1]), userPoints);
+            rewardsGrid.add(rewardPanel);
+        }
+        
+        panel.add(rewardsGrid);
+        
         return panel;
     }
-
-    private JPanel createCategorySection(String title, List<MenuItem> items) {
-        JPanel sectionPanel = new JPanel();
-        sectionPanel.setLayout(new BoxLayout(sectionPanel, BoxLayout.Y_AXIS));
-        sectionPanel.setBackground(Color.WHITE);
-        sectionPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        // Section title
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("Arial", Font.BOLD, 22));
-        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        sectionPanel.add(titleLabel);
-        sectionPanel.add(Box.createRigidArea(new Dimension(0, 15)));
-
-        // Items grid
-        JPanel itemsGrid = new JPanel(new GridLayout(0, 3, 20, 20));
-        itemsGrid.setBackground(Color.WHITE);
-        itemsGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        for (MenuItem item : items) {
-            itemsGrid.add(createItemCard(item));
-        }
-
-        sectionPanel.add(itemsGrid);
-        return sectionPanel;
-    }
-
-    private JPanel createItemCard(MenuItem item) {
-        JPanel card = new JPanel();
-        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBackground(Color.WHITE);
-        card.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(Color.LIGHT_GRAY),
-            BorderFactory.createEmptyBorder(15, 15, 15, 15)
-        ));
-
-        // Item image - Loading from resources
-        JLabel imageLabel = new JLabel();
+    
+    private int getUserPoints() {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        int points = 0;
+        
         try {
-            String imagePath = "/images/products/" + convertToImageName(item.getName());
-            URL imageUrl = getClass().getResource(imagePath);
-
-            if (imageUrl != null) {
-                ImageIcon icon = new ImageIcon(imageUrl);
-                Image scaledImage = icon.getImage().getScaledInstance(150, 150, Image.SCALE_SMOOTH);
-                imageLabel.setIcon(new ImageIcon(scaledImage));
-                System.out.println("Successfully loaded image: " + imagePath); // Debug
-            } else {
-                System.out.println("Image not found: " + imagePath); // Debug
-                // Set a default placeholder image
-                imageLabel.setIcon(createPlaceholderIcon());
+            conn = DBConnection.getConnection();
+            String sql = "SELECT points FROM users WHERE user_id = ?";
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, currentUser.getUserId());
+            rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                points = rs.getInt("points");
             }
-        } catch (Exception e) {
-            System.err.println("Error loading image: " + e.getMessage());
-            imageLabel.setIcon(createPlaceholderIcon());
+        } catch (SQLException e) {
+            System.err.println("Error retrieving user points: " + e.getMessage());
+        } finally {
+            try {
+                if (rs != null) rs.close();
+                if (stmt != null) stmt.close();
+                if (conn != null) conn.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
-        imageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        imageLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
-        card.add(imageLabel);
-
-
-        // Item name (removed ID display for cleaner UI)
-        JLabel nameLabel = new JLabel(item.getName());
-        nameLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.add(nameLabel);
-        card.add(Box.createRigidArea(new Dimension(0, 5)));
-
-        // Item price
-        JLabel priceLabel = new JLabel(String.format("$%.2f", item.getPrice()));
-        priceLabel.setFont(new Font("Arial", Font.PLAIN, 14));
-        priceLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.add(priceLabel);
-        card.add(Box.createRigidArea(new Dimension(0, 10)));
-
-        // Add to cart button
-        JButton addButton = new JButton("Add to cart");
-        addButton.setAlignmentX(Component.LEFT_ALIGNMENT);
-        addButton.setBackground(new Color(0, 102, 51));
-        addButton.setForeground(Color.WHITE);
-        addButton.setFont(new Font("Arial", Font.BOLD, 12));
-        addButton.setFocusPainted(false);
-        addButton.addActionListener(e -> addToCart(item));
-        card.add(addButton);
-
-        return card;
+        
+        return points;
     }
     
-    private String convertToImageName(String productName) {
-    return productName.toLowerCase()
-            .replace(" ", "-")
-            .replace("'", "")
-            .replace("(", "")
-            .replace(")", "") + ".png";
-}
-
-    private ImageIcon createPlaceholderIcon() {
-        // Create a simple placeholder image
-        BufferedImage img = new BufferedImage(150, 150, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2d = img.createGraphics();
-        g2d.setColor(Color.LIGHT_GRAY);
-        g2d.fillRect(0, 0, 150, 150);
-        g2d.setColor(Color.DARK_GRAY);
-        g2d.drawString("No Image", 50, 75);
-        g2d.dispose();
-        return new ImageIcon(img);
-    }
-
-    private String getLocalImagePath(String productName) {
-        // Convert product name to image filename format
-        String imageName = productName.toLowerCase()
-            .replace(" ", "-")          // Replace spaces with hyphens
-            .replace("'", "")           // Remove apostrophes
-            .replace("(", "")           // Remove special chars
-            .replace(")", "") + ".png";  // Assume JPG format
-
-        // Get the image path (adjust this to your actual image location)
-        String imagePath = "images/" + imageName;
-
-        // Check if file exists
-        File imageFile = new File(imagePath);
-        if (imageFile.exists()) {
-            return imagePath;
-        }
-
-        // Try PNG if JPG not found
-        imagePath = "images/" + imageName.replace(".jpg", ".png");
-        imageFile = new File(imagePath);
-        return imageFile.exists() ? imagePath : null;
-    }
-
-    private JButton createNavButton(String text) {
-        JButton button = new JButton(text);
-        button.setForeground(Color.WHITE);
-        button.setBackground(Color.BLACK);
-        button.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
-        button.setFont(new Font("Arial", Font.BOLD, 14));
-        button.setFocusPainted(false);
-        button.setContentAreaFilled(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    private JPanel createRewardPanel(String rewardName, int pointsCost, int userPoints) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(220, 220, 220), 1),
+            BorderFactory.createEmptyBorder(15, 15, 15, 15)
+        ));
         
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setForeground(new Color(200, 200, 200));
-            }
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setForeground(Color.WHITE);
+        JLabel nameLabel = new JLabel(rewardName);
+        nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        
+        JLabel pointsLabel = new JLabel(pointsCost + " points");
+        pointsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        
+        JButton redeemButton = new JButton("Redeem");
+        redeemButton.setEnabled(userPoints >= pointsCost);
+        
+        if (!redeemButton.isEnabled()) {
+            redeemButton.setToolTipText("Not enough points");
+        }
+        
+        redeemButton.addActionListener(e -> {
+            int option = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to redeem " + rewardName + " for " + pointsCost + " points?",
+                "Confirm Redemption",
+                JOptionPane.YES_NO_OPTION);
+                
+            if (option == JOptionPane.YES_OPTION) {
+                // Process reward redemption
+                JOptionPane.showMessageDialog(this,
+                    "You have successfully redeemed " + rewardName + ".\n" +
+                    "Your reward code: " + generateRewardCode(),
+                    "Redemption Successful",
+                    JOptionPane.INFORMATION_MESSAGE);
             }
         });
         
-        return button;
+        JPanel infoPanel = new JPanel();
+        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+        infoPanel.setBackground(Color.WHITE);
+        infoPanel.add(nameLabel);
+        infoPanel.add(Box.createVerticalStrut(5));
+        infoPanel.add(pointsLabel);
+        
+        panel.add(infoPanel, BorderLayout.CENTER);
+        panel.add(redeemButton, BorderLayout.EAST);
+        
+        return panel;
     }
     
-    private void addToCart(MenuItem item) {
-        int cartId = getOrCreateCart();
-        if (cartId == -1) return;
-
-        // Check if item already in cart
-        for (CartItem cartItem : cartItems) {
-            if (cartItem.item.getProductId() == item.getProductId()) {
-                updateCartItemQuantity(item.getProductId(), cartItem.quantity + 1);
-                return;
-            }
+    private String generateRewardCode() {
+        // Simple random code generator
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder code = new StringBuilder();
+        
+        for (int i = 0; i < 8; i++) {
+            int index = (int)(Math.random() * chars.length());
+            code.append(chars.charAt(index));
         }
-
-        // Add new item to database
-        String sql = "INSERT INTO cart_items (cart_id, product_id, quantity) VALUES (?, ?, 1)";
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, cartId);
-            stmt.setInt(2, item.getProductId());
-            stmt.executeUpdate();
-
-            // Add to local cart
-            cartItems.add(new CartItem(item));
-            updateCartCounter();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-    
-    private void updateCartItemQuantity(int productId, int newQuantity) {
-        if (newQuantity <= 0) {
-            removeCartItem(productId);
-            return;
-        }
-
-        // Update database
-        String sql = "UPDATE cart_items SET quantity = ? WHERE cart_id = ? AND product_id = ?";
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, newQuantity);
-            stmt.setInt(2, getOrCreateCart());
-            stmt.setInt(3, productId);
-            stmt.executeUpdate();
-
-            // Update local cart
-            for (CartItem cartItem : cartItems) {
-                if (cartItem.item.getProductId() == productId) {
-                    cartItem.quantity = newQuantity;
-                    break;
-                }
-            }
-            updateCartCounter();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void removeCartItem(int productId) {
-        String sql = "DELETE FROM cart_items WHERE cart_id = ? AND product_id = ?";
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, getOrCreateCart());
-            stmt.setInt(2, productId);
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-    
-    private class CartItem {
-        MenuItem item;
-        int quantity;
-        boolean selected;
-
-        public CartItem(MenuItem item) {
-            this.item = item;
-            this.quantity = 1;
-            this.selected = true;
-        }
-    }
-    
-    private List<MenuItem> getDatabaseDrinks() {
-        return getProductsByCategory("DRINK");
-    }
-
-    private List<MenuItem> getDatabaseFood() {
-        return getProductsByCategory("FOOD");
-    }
-
-    private List<MenuItem> getDatabaseMerchandise() {
-        return getProductsByCategory("MERCHANDISE");
-    }
-
-    private List<MenuItem> getProductsByCategory(String category) {
-        List<MenuItem> items = new ArrayList<>();
-        String sql = "SELECT product_id, name, price FROM products WHERE category = ? AND is_available = TRUE";
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, category);
-            ResultSet rs = stmt.executeQuery();
-
-            System.out.println("Loading " + category + " items:"); // Debug
-            
-            System.out.println("Database connection test:");
-            try (Connection conn = DBConnection.getConnection()) {
-                System.out.println("Connection successful!");
-            } catch (SQLException e) {
-                System.out.println("Connection failed:");
-                e.printStackTrace();
-            }
-
-            while (rs.next()) {
-                int id = rs.getInt("product_id");
-                String name = rs.getString("name");
-                double price = rs.getDouble("price");
-
-                System.out.println(" - " + id + ": " + name + " ($" + price + ")"); // Debug
-
-                items.add(new MenuItem(id, name, price));
-                
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this,
-                "Failed to load " + category.toLowerCase() + " items",
-                "Database Error",
-                JOptionPane.ERROR_MESSAGE);
-        }
-        return items;
-    }
-
-    private static class MenuItem {
-        private int productId;  // Now includes productId
-        private String name;
-        private double price;
-
-        public MenuItem(int productId, String name, double price) {
-            this.productId = productId;
-            this.name = name;
-            this.price = price;
-        }
-
-        // Getters
-        public int getProductId() { return productId; }
-        public String getName() { return name; }
-        public double getPrice() { return price; }
-    }
+        
+        return code.toString();
     }
 }
