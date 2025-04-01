@@ -10,8 +10,8 @@ import java.sql.SQLException;
 
 public class DBConnection {
     private static final String URL = "jdbc:mysql://localhost:3306/coffeeshop";
-    private static final String USER = "root";
-    private static final String PASSWORD = "";
+    private static final String USER = "root"; // Change if needed
+    private static final String PASSWORD = ""; // Set your password
     
     public static Connection getConnection() throws SQLException {
         try {

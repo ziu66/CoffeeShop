@@ -31,8 +31,8 @@ public class UserDashboard extends JFrame {
     public UserDashboard(User user) {
         this.currentUser = user;
         initializeUI();
+        loadCartItems(); // Add this line to load saved cart
     }
-    
     
 
     private void initializeUI() {
@@ -641,6 +641,22 @@ public class UserDashboard extends JFrame {
         checkoutFrame.setVisible(true);
     }
    
+    private void processCheckout() {
+        // After successful payment processing:
+        String sql = "DELETE FROM cart_items WHERE cart_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, getOrCreateCart());
+            stmt.executeUpdate();
+
+            // Clear local cart
+            cartItems.clear();
+            updateCartCounter();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
 
     private double calculateSelectedItems() {
         double subtotal = 0.0;
@@ -700,12 +716,22 @@ public class UserDashboard extends JFrame {
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        // Drinks section
-        panel.add(createCategorySection("Drinks", createSampleDrinks()));
-        panel.add(Box.createRigidArea(new Dimension(0, 30)));
-        
-        // Meals section
-        panel.add(createCategorySection("Meals", createSampleMeals()));
+        // Load drinks
+        List<MenuItem> drinks = getDatabaseDrinks();
+        if (!drinks.isEmpty()) {
+            panel.add(createCategorySection("Drinks", drinks));
+            panel.add(Box.createRigidArea(new Dimension(0, 30)));
+        } else {
+            System.out.println("No drinks found in database"); // Debug
+        }
+
+        // Load food
+        List<MenuItem> food = getDatabaseFood();
+        if (!food.isEmpty()) {
+            panel.add(createCategorySection("Food", food));
+        } else {
+            System.out.println("No food found in database"); // Debug
+        }
 
         return panel;
     }
@@ -716,10 +742,18 @@ public class UserDashboard extends JFrame {
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        panel.add(createCategorySection("Merchandise", createSampleMerchandise()));
+        List<MenuItem> merchandise = getDatabaseMerchandise();
+        if (!merchandise.isEmpty()) {
+            panel.add(createCategorySection("Merchandise", merchandise));
+        } else {
+            panel.add(new JLabel("No merchandise available"));
+            System.out.println("No merchandise found in database"); // Debug
+        }
+
         return panel;
     }
 
+    
     private JPanel createRewardsContent() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -776,13 +810,32 @@ public class UserDashboard extends JFrame {
             BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
 
-        // Item image placeholder
-        JLabel imageLabel = new JLabel(new ImageIcon(getClass().getResource("")));
+        // Item image - Loading from resources
+        JLabel imageLabel = new JLabel();
+        try {
+            String imagePath = "/images/products/" + convertToImageName(item.getName());
+            URL imageUrl = getClass().getResource(imagePath);
+
+            if (imageUrl != null) {
+                ImageIcon icon = new ImageIcon(imageUrl);
+                Image scaledImage = icon.getImage().getScaledInstance(150, 150, Image.SCALE_SMOOTH);
+                imageLabel.setIcon(new ImageIcon(scaledImage));
+                System.out.println("Successfully loaded image: " + imagePath); // Debug
+            } else {
+                System.out.println("Image not found: " + imagePath); // Debug
+                // Set a default placeholder image
+                imageLabel.setIcon(createPlaceholderIcon());
+            }
+        } catch (Exception e) {
+            System.err.println("Error loading image: " + e.getMessage());
+            imageLabel.setIcon(createPlaceholderIcon());
+        }
         imageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         imageLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
         card.add(imageLabel);
 
-        // Item name
+
+        // Item name (removed ID display for cleaner UI)
         JLabel nameLabel = new JLabel(item.getName());
         nameLabel.setFont(new Font("Arial", Font.BOLD, 16));
         nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -807,6 +860,49 @@ public class UserDashboard extends JFrame {
         card.add(addButton);
 
         return card;
+    }
+    
+    private String convertToImageName(String productName) {
+    return productName.toLowerCase()
+            .replace(" ", "-")
+            .replace("'", "")
+            .replace("(", "")
+            .replace(")", "") + ".png";
+}
+
+    private ImageIcon createPlaceholderIcon() {
+        // Create a simple placeholder image
+        BufferedImage img = new BufferedImage(150, 150, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = img.createGraphics();
+        g2d.setColor(Color.LIGHT_GRAY);
+        g2d.fillRect(0, 0, 150, 150);
+        g2d.setColor(Color.DARK_GRAY);
+        g2d.drawString("No Image", 50, 75);
+        g2d.dispose();
+        return new ImageIcon(img);
+    }
+
+    private String getLocalImagePath(String productName) {
+        // Convert product name to image filename format
+        String imageName = productName.toLowerCase()
+            .replace(" ", "-")          // Replace spaces with hyphens
+            .replace("'", "")           // Remove apostrophes
+            .replace("(", "")           // Remove special chars
+            .replace(")", "") + ".png";  // Assume JPG format
+
+        // Get the image path (adjust this to your actual image location)
+        String imagePath = "images/" + imageName;
+
+        // Check if file exists
+        File imageFile = new File(imagePath);
+        if (imageFile.exists()) {
+            return imagePath;
+        }
+
+        // Try PNG if JPG not found
+        imagePath = "images/" + imageName.replace(".jpg", ".png");
+        imageFile = new File(imagePath);
+        return imageFile.exists() ? imagePath : null;
     }
 
     private JButton createNavButton(String text) {
@@ -860,66 +956,127 @@ public class UserDashboard extends JFrame {
         }
     }
     
-    private class CartItem {
-    MenuItem item;
-    int quantity;
-    boolean selected;
+    private void updateCartItemQuantity(int productId, int newQuantity) {
+        if (newQuantity <= 0) {
+            removeCartItem(productId);
+            return;
+        }
+
+        // Update database
+        String sql = "UPDATE cart_items SET quantity = ? WHERE cart_id = ? AND product_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, newQuantity);
+            stmt.setInt(2, getOrCreateCart());
+            stmt.setInt(3, productId);
+            stmt.executeUpdate();
+
+            // Update local cart
+            for (CartItem cartItem : cartItems) {
+                if (cartItem.item.getProductId() == productId) {
+                    cartItem.quantity = newQuantity;
+                    break;
+                }
+            }
+            updateCartCounter();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void removeCartItem(int productId) {
+        String sql = "DELETE FROM cart_items WHERE cart_id = ? AND product_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, getOrCreateCart());
+            stmt.setInt(2, productId);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
     
-    public CartItem(MenuItem item) {
-        this.item = item;
-        this.quantity = 1;
-        this.selected = true;
+    private class CartItem {
+        MenuItem item;
+        int quantity;
+        boolean selected;
+
+        public CartItem(MenuItem item) {
+            this.item = item;
+            this.quantity = 1;
+            this.selected = true;
+        }
     }
-}
-    // Sample data methods
-    private List<MenuItem> createSampleDrinks() {
-        List<MenuItem> drinks = new ArrayList<>();
-        drinks.add(new MenuItem("Espresso", 3.50));
-        drinks.add(new MenuItem("Cappuccino", 4.50));
-        drinks.add(new MenuItem("Latte", 4.75));
-        drinks.add(new MenuItem("Mocha", 5.00));
-        drinks.add(new MenuItem("Americano", 3.75));
-        drinks.add(new MenuItem("Flat White", 4.25));
-        return drinks;
+    
+    private List<MenuItem> getDatabaseDrinks() {
+        return getProductsByCategory("DRINK");
     }
 
-    private List<MenuItem> createSampleMeals() {
-        List<MenuItem> meals = new ArrayList<>();
-        meals.add(new MenuItem("Avocado Toast", 8.50));
-        meals.add(new MenuItem("Breakfast Burrito", 9.75));
-        meals.add(new MenuItem("Pancake Stack", 7.50));
-        meals.add(new MenuItem("Eggs Benedict", 10.25));
-        meals.add(new MenuItem("Greek Yogurt Bowl", 6.75));
-        meals.add(new MenuItem("Breakfast Sandwich", 7.25));
-        return meals;
+    private List<MenuItem> getDatabaseFood() {
+        return getProductsByCategory("FOOD");
     }
 
-    private List<MenuItem> createSampleMerchandise() {
-        List<MenuItem> merchandise = new ArrayList<>();
-        merchandise.add(new MenuItem("Coffee Mug", 12.99));
-        merchandise.add(new MenuItem("Travel Tumbler", 24.99));
-        merchandise.add(new MenuItem("Coffee Beans (1lb)", 14.99));
-        merchandise.add(new MenuItem("Brewing Kit", 29.99));
-        merchandise.add(new MenuItem("Gift Card", 25.00));
-        merchandise.add(new MenuItem("T-Shirt", 19.99));
-        return merchandise;
+    private List<MenuItem> getDatabaseMerchandise() {
+        return getProductsByCategory("MERCHANDISE");
+    }
+
+    private List<MenuItem> getProductsByCategory(String category) {
+        List<MenuItem> items = new ArrayList<>();
+        String sql = "SELECT product_id, name, price FROM products WHERE category = ? AND is_available = TRUE";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, category);
+            ResultSet rs = stmt.executeQuery();
+
+            System.out.println("Loading " + category + " items:"); // Debug
+            
+            System.out.println("Database connection test:");
+            try (Connection conn = DBConnection.getConnection()) {
+                System.out.println("Connection successful!");
+            } catch (SQLException e) {
+                System.out.println("Connection failed:");
+                e.printStackTrace();
+            }
+
+            while (rs.next()) {
+                int id = rs.getInt("product_id");
+                String name = rs.getString("name");
+                double price = rs.getDouble("price");
+
+                System.out.println(" - " + id + ": " + name + " ($" + price + ")"); // Debug
+
+                items.add(new MenuItem(id, name, price));
+                
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                "Failed to load " + category.toLowerCase() + " items",
+                "Database Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+        return items;
     }
 
     private static class MenuItem {
+        private int productId;  // Now includes productId
         private String name;
         private double price;
 
-        public MenuItem(String name, double price) {
+        public MenuItem(int productId, String name, double price) {
+            this.productId = productId;
             this.name = name;
             this.price = price;
         }
 
-        public String getName() {
-            return name;
-        }
-
-        public double getPrice() {
-            return price;
-        }
+        // Getters
+        public int getProductId() { return productId; }
+        public String getName() { return name; }
+        public double getPrice() { return price; }
+    }
     }
 }
