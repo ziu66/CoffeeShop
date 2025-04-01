@@ -26,6 +26,7 @@ public class UserDashboard extends JFrame {
     private double cartTotal = 0.0;
     private JLabel cartCounter;
     private String selectedAddress;
+    private int currentCartId = -1;
     
     public UserDashboard(User user) {
         this.currentUser = user;
@@ -244,6 +245,94 @@ public class UserDashboard extends JFrame {
 
         panel.add(navBar, BorderLayout.SOUTH);
         return panel;
+    }
+    
+    private int getOrCreateCart() {
+    if (currentCartId != -1) return currentCartId;
+    
+    String sql = "SELECT cart_id FROM carts WHERE user_id = ?";
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement stmt = conn.prepareStatement(sql)) {
+         
+        stmt.setInt(1, currentUser.getUserId());
+        ResultSet rs = stmt.executeQuery();
+        
+        if (rs.next()) {
+            currentCartId = rs.getInt("cart_id");
+            return currentCartId;
+        }
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+    
+    // If no cart exists, create one
+    String insertSql = "INSERT INTO carts (user_id) VALUES (?)";
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement stmt = conn.prepareStatement(insertSql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+         
+        stmt.setInt(1, currentUser.getUserId());
+        stmt.executeUpdate();
+        
+        ResultSet rs = stmt.getGeneratedKeys();
+        if (rs.next()) {
+            currentCartId = rs.getInt(1);
+            return currentCartId;
+        }
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+    
+    return -1; // Error case
+}
+
+// 2. Method to load cart items from database
+    private void loadCartItems() {
+        cartItems.clear();
+        int cartId = getOrCreateCart();
+        if (cartId == -1) return;
+
+        String sql = "SELECT p.product_id, p.name, p.price, ci.quantity " +
+                    "FROM cart_items ci " +
+                    "JOIN products p ON ci.product_id = p.product_id " +
+                    "WHERE ci.cart_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, cartId);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                MenuItem item = new MenuItem(
+                    rs.getInt("product_id"),
+                    rs.getString("name"),
+                    rs.getDouble("price")
+                );
+                CartItem cartItem = new CartItem(item);
+                cartItem.quantity = rs.getInt("quantity");
+                cartItems.add(cartItem);
+            }
+            updateCartCounter();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // 3. Update your MenuItem class (inside UserDashboard)
+    private static class MenuItem {
+        private int productId;
+        private String name;
+        private double price;
+
+        public MenuItem(int productId, String name, double price) {
+            this.productId = productId;
+            this.name = name;
+            this.price = price;
+        }
+
+        public int getProductId() { return productId; }
+        public String getName() { return name; }
+        public double getPrice() { return price; }
     }
 
     // Method to update cart counter
@@ -743,20 +832,32 @@ public class UserDashboard extends JFrame {
     }
     
     private void addToCart(MenuItem item) {
+        int cartId = getOrCreateCart();
+        if (cartId == -1) return;
+
         // Check if item already in cart
         for (CartItem cartItem : cartItems) {
-            if (cartItem.item.getName().equals(item.getName())) {
-                cartItem.quantity++;
-                cartTotal += item.getPrice();
-                updateCartCounter();
+            if (cartItem.item.getProductId() == item.getProductId()) {
+                updateCartItemQuantity(item.getProductId(), cartItem.quantity + 1);
                 return;
             }
         }
 
-        // Add new item
-        cartItems.add(new CartItem(item));
-        cartTotal += item.getPrice();
-        updateCartCounter();
+        // Add new item to database
+        String sql = "INSERT INTO cart_items (cart_id, product_id, quantity) VALUES (?, ?, 1)";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, cartId);
+            stmt.setInt(2, item.getProductId());
+            stmt.executeUpdate();
+
+            // Add to local cart
+            cartItems.add(new CartItem(item));
+            updateCartCounter();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
     
     private class CartItem {
