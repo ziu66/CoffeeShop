@@ -6,13 +6,11 @@ package coffeeshop;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-import javax.imageio.ImageIO;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -22,9 +20,10 @@ public class UserDashboard extends JFrame {
     private JPanel mainPanel;
     private JPanel headerPanel;
     private JScrollPane scrollPane;
-    private User currentUser;
+    private final User currentUser;
     private JPanel contentPanel;
     private JButton[] navButtons;
+    private CardLayout cardLayout;
     
     private List<CartItem> cartItems = new ArrayList<>();
     private double cartTotal = 0.0;
