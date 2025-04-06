@@ -10,16 +10,13 @@ import java.sql.SQLException;
 
 public class CoffeeShop {
     public static void main(String[] args) {
-        // Set the system look and feel for better UI appearance
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
             System.err.println("Error setting system look and feel: " + e.getMessage());
         }
 
-        // Initialize database connection
         try {
-            // Test the database connection
             DBConnection.getConnection();
             System.out.println("Database connection established successfully.");
         } catch (SQLException e) {
@@ -31,9 +28,9 @@ public class CoffeeShop {
             System.exit(1);
         }
 
-        // Show the login form
         java.awt.EventQueue.invokeLater(() -> {
             new LoginForm().setVisible(true);
         });
     }
 }
+

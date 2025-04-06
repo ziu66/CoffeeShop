@@ -4,10 +4,6 @@
  */
 package coffeeshop;
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.ActionEvent;
-
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -29,12 +25,12 @@ import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 
 public class LoginForm extends JFrame {
-    private JTextField txtEmail;
-    private JPasswordField txtPassword;
-    private JCheckBox chkNotRobot;
-    private JButton btnSignIn;
-    private JButton btnRegisterNow;
-    private JLabel lblForgotPassword;
+    private final JTextField txtEmail;
+    private final JPasswordField txtPassword;
+    private final JCheckBox chkNotRobot;
+    private final JButton btnSignIn;
+    private final JButton btnRegisterNow;
+    private final JLabel lblForgotPassword;
 
     public LoginForm() {
         setTitle("But First, Coffee - Log In");
