@@ -55,11 +55,15 @@ public class UserDashboard extends JFrame {
         JPanel rewardsPanel = createRewardsContent();
         JPanel cartPanel = createCartContent();
 
-        // 4. Add content panels to card panel
+        // 4. Add content panels to card panel (NOT to mainPanel)
         cardPanel.add(menuPanel, "menu");
         cardPanel.add(merchPanel, "merchandise");
         cardPanel.add(rewardsPanel, "rewards");
         cardPanel.add(cartPanel, "cart");
+
+        // Create checkout panel and add it to cardPanel directly
+        JPanel checkoutPanel = cartManager.createCheckoutPanel(cardPanel, cardLayout);
+        cardPanel.add(checkoutPanel, "checkout");
 
         // 5. Add card panel to main panel
         mainPanel.add(cardPanel, BorderLayout.CENTER);
@@ -214,21 +218,17 @@ public class UserDashboard extends JFrame {
             navContent.add(navButtons[i]);
         }
 
-        // Set initial active button
         updateActiveButton(0);
 
-        // Right-aligned components (welcome + logout)
         JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
         rightPanel.setBackground(Color.BLACK);
         rightPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 20));
 
-        // Welcome Label
         JLabel navWelcomeLabel = new JLabel("Welcome, " + currentUser.getFullName() + "! ");
         navWelcomeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         navWelcomeLabel.setForeground(new Color(220, 220, 220));
         rightPanel.add(navWelcomeLabel);
 
-        // Logout Button
         JButton logoutButton = new JButton("Logout");
         logoutButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         logoutButton.setForeground(new Color(200, 200, 200));
@@ -240,7 +240,6 @@ public class UserDashboard extends JFrame {
         logoutButton.setFocusPainted(false);
         logoutButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        // Hover effects
         logoutButton.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseEntered(java.awt.event.MouseEvent evt) {
                 logoutButton.setForeground(Color.WHITE);
@@ -259,7 +258,6 @@ public class UserDashboard extends JFrame {
 
         rightPanel.add(logoutButton);
 
-        // Add components to navBar
         navBar.add(navContent, BorderLayout.WEST);
         navBar.add(rightPanel, BorderLayout.EAST);
 
@@ -280,36 +278,55 @@ public class UserDashboard extends JFrame {
     }
 
     private JPanel createMenuContent() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBackground(new Color(40, 40, 40)); // Dark background
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 40, 20, 40));
+        // Main panel with border layout
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBackground(new Color(40, 40, 40)); // Dark background
+
+        // Header panel (stays at the top)
+        JPanel headerPanel = new JPanel();
+        headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
+        headerPanel.setBackground(new Color(40, 40, 40));
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(20, 40, 10, 40));
 
         // Add section header
         JLabel headerLabel = new JLabel("Our Menu");
         headerLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
         headerLabel.setForeground(Color.WHITE);
         headerLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        panel.add(headerLabel);
-        panel.add(Box.createVerticalStrut(20));
+        headerPanel.add(headerLabel);
+
+        // Content panel that will be scrollable (contains all categories)
+        JPanel contentPanel = new JPanel();
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+        contentPanel.setBackground(new Color(40, 40, 40));
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 40, 20, 40));
 
         // Categories based on your database
         String[] categories = {"DRINK", "MEAL"};
 
-        // Fetch menu items from database
         for (String category : categories) {
-            JPanel categoryPanel = createCategoryPanel(category, getMenuItemsByCategory(category));
-            panel.add(categoryPanel);
-            panel.add(Box.createVerticalStrut(30));
+            List<MenuItem> items = getMenuItemsByCategory(category);
+            JPanel categoryPanel = createCategoryPanel(category, items);
+            contentPanel.add(categoryPanel);
+            contentPanel.add(Box.createVerticalStrut(30));
         }
 
-        return panel;
+        JScrollPane scrollPane = new JScrollPane(contentPanel);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setBorder(null); // Remove border
+        scrollPane.getViewport().setBackground(new Color(40, 40, 40));
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16); // Faster scrolling
+
+        mainPanel.add(headerPanel, BorderLayout.NORTH);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+
+        return mainPanel;
     }
 
-    
     private JPanel createCategoryPanel(String category, List<MenuItem> items) {
         JPanel panel = new JPanel();
-        panel.setLayout(new BorderLayout()); // Changed to BorderLayout for better organization
+        panel.setLayout(new BorderLayout());
         panel.setBackground(new Color(40, 40, 40)); // Dark background
 
         // Create header panel
@@ -333,7 +350,6 @@ public class UserDashboard extends JFrame {
                 displayCategory = category;
         }
 
-        // Category header
         JLabel categoryLabel = new JLabel(displayCategory);
         categoryLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
         categoryLabel.setForeground(new Color(218, 165, 32)); // Gold color
@@ -341,14 +357,12 @@ public class UserDashboard extends JFrame {
         headerPanel.add(categoryLabel);
         headerPanel.add(Box.createVerticalStrut(10));
 
-        // Add divider
         JSeparator separator = new JSeparator();
         separator.setMaximumSize(new Dimension(Short.MAX_VALUE, 1));
         separator.setForeground(new Color(70, 70, 70)); // Darker separator
         headerPanel.add(separator);
         headerPanel.add(Box.createVerticalStrut(15));
 
-        // Grid of items
         JPanel itemsGrid = new JPanel(new GridLayout(0, 3, 20, 20));
         itemsGrid.setBackground(new Color(40, 40, 40)); // Dark background
 
@@ -364,32 +378,21 @@ public class UserDashboard extends JFrame {
             }
         }
 
-        // Add scrolling to the items grid
-        JScrollPane scrollPane = new JScrollPane(itemsGrid);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scrollPane.setBorder(null); // Remove border
-        scrollPane.getViewport().setBackground(new Color(40, 40, 40));
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16); // Faster scrolling
-
-        // Add components to the main panel
         panel.add(headerPanel, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
+        panel.add(itemsGrid, BorderLayout.CENTER);
 
         return panel;
     }
 
-    // Your original method for creating each item panel - with fixed button color
     private JPanel createItemPanel(MenuItem item) {
         JPanel panel = new JPanel();
         panel.setLayout(new BorderLayout());
-        panel.setBackground(new Color(50, 50, 50)); // Slightly lighter than background
+        panel.setBackground(new Color(50, 50, 50));
         panel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(new Color(60, 60, 60), 1),
             BorderFactory.createEmptyBorder(10, 10, 10, 10)
         ));
 
-        // Try to load product image
         JLabel imageLabel = new JLabel();
         try {
             String imagePath = null;
@@ -401,8 +404,31 @@ public class UserDashboard extends JFrame {
                 imagePath = "/images/espresso.png";
             } else if (productName.contains("latte")) {
                 imagePath = "/images/latte.png";
-            } else {
+            } else if (productName.contains("coffee")) {
                 imagePath = "";
+            } else if (productName.contains("tea")) {
+                imagePath = "/images/tea.png";
+            } else if (productName.contains("sandwich")) {
+                imagePath = "/images/sandwich.png";
+            } else if (productName.contains("cake") || productName.contains("pastry")) {
+                imagePath = "/images/cake.png";
+            } else if (productName.contains("breakfast")) {
+                imagePath = "";
+            } else if (productName.contains("salad")) {
+                imagePath = "/images/salad.png";
+            } else if (productName.contains("mug") || productName.contains("tumbler")) {
+                imagePath = "/images/mug.png";
+            } else if (productName.contains("t-shirt") || productName.contains("shirt")) {
+                imagePath = "/images/tshirt.png";
+            } else {
+                // Default image based on category
+                if (productName.contains("drink")) {
+                    imagePath = "";
+                } else if (productName.contains("meal")) {
+                    imagePath = "";
+                } else {
+                    imagePath = "";
+                }
             }
 
             java.net.URL imageURL = getClass().getResource(imagePath);
@@ -412,13 +438,13 @@ public class UserDashboard extends JFrame {
                 imageLabel = new JLabel(new ImageIcon(scaledImage));
             } else {
                 System.err.println("Image resource not found: " + imagePath);
-                imageLabel = new JLabel("No Image");
-                imageLabel.setForeground(Color.WHITE);
+                // Create placeholder image
+                imageLabel = createPlaceholderImage(150, 150, item.getName().substring(0, 1).toUpperCase());
             }
         } catch (Exception e) {
             System.err.println("Could not load image: " + e.getMessage());
-            imageLabel = new JLabel("No Image");
-            imageLabel.setForeground(Color.WHITE);
+            // Create placeholder with first letter of product name
+            imageLabel = createPlaceholderImage(150, 150, item.getName().substring(0, 1).toUpperCase());
         }
 
         // Center the image
@@ -434,14 +460,31 @@ public class UserDashboard extends JFrame {
         JLabel nameLabel = new JLabel(item.getName());
         nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
         nameLabel.setForeground(Color.WHITE);
+        nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel priceLabel = new JLabel("P" + String.format("%.2f", item.getPrice()));
         priceLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         priceLabel.setForeground(new Color(218, 165, 32)); // Gold color for price
+        priceLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        infoPanel.add(nameLabel);
-        infoPanel.add(Box.createVerticalStrut(5));
-        infoPanel.add(priceLabel);
+        // Add description if available
+        if (item.getDescription() != null && !item.getDescription().isEmpty()) {
+            JLabel descLabel = new JLabel("<html><body style='width: 150px'>" + 
+                                         item.getDescription() + "</body></html>");
+            descLabel.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+            descLabel.setForeground(new Color(200, 200, 200));
+            descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            infoPanel.add(nameLabel);
+            infoPanel.add(Box.createVerticalStrut(5));
+            infoPanel.add(priceLabel);
+            infoPanel.add(Box.createVerticalStrut(5));
+            infoPanel.add(descLabel);
+        } else {
+            infoPanel.add(nameLabel);
+            infoPanel.add(Box.createVerticalStrut(5));
+            infoPanel.add(priceLabel);
+        }
 
         // Content panel (image and info)
         JPanel contentPanel = new JPanel(new BorderLayout());
@@ -492,6 +535,20 @@ public class UserDashboard extends JFrame {
 
         return panel;
     }
+
+    // Helper method to create placeholder images when no image is available
+    private JLabel createPlaceholderImage(int width, int height, String letter) {
+        JLabel placeholder = new JLabel(letter);
+        placeholder.setPreferredSize(new Dimension(width, height));
+        placeholder.setHorizontalAlignment(JLabel.CENTER);
+        placeholder.setVerticalAlignment(JLabel.CENTER);
+        placeholder.setOpaque(true);
+        placeholder.setBackground(new Color(70, 70, 70));
+        placeholder.setForeground(Color.WHITE);
+        placeholder.setFont(new Font("Segoe UI", Font.BOLD, 48));
+        placeholder.setBorder(BorderFactory.createLineBorder(new Color(100, 100, 100), 1));
+        return placeholder;
+    }
     
     private List<MenuItem> getMenuItemsByCategory(String category) {
         List<MenuItem> items = new ArrayList<>();
@@ -501,7 +558,7 @@ public class UserDashboard extends JFrame {
 
         try {
             conn = DBConnection.getConnection();
-            String sql = "SELECT product_id, name, price, description FROM products WHERE category = ?";
+            String sql = "SELECT product_id, name, price, description FROM products WHERE category = ? AND is_available = 1";
             stmt = conn.prepareStatement(sql);
             stmt.setString(1, category);
             rs = stmt.executeQuery();
@@ -589,7 +646,7 @@ public class UserDashboard extends JFrame {
         headerLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
         headerLabel.setForeground(Color.WHITE);
         headerLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        panel.add(headerLabel);
+        panel.add(headerLabel); 
         panel.add(Box.createVerticalStrut(20));
 
         // User points
