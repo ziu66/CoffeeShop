@@ -131,18 +131,18 @@ import javax.swing.border.LineBorder;
             summaryPanel.setBackground(DARKER_BG);
             summaryPanel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR),
-                BorderFactory.createEmptyBorder(15, 15, 15, 15)  // Reduced padding from 20px to 15px
+                BorderFactory.createEmptyBorder(15, 15, 15, 15) 
             ));
 
             // Subtotal - More compact layout
             JPanel subtotalPanel = new JPanel(new BorderLayout());
             subtotalPanel.setBackground(DARKER_BG);
-            subtotalPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));  // Reduced vertical padding
+            subtotalPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));  
             JLabel subtotalLabel = new JLabel("Subtotal (" + getSelectedItemCount() + " items)");
-            subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));  // Reduced font size from 14 to 13
+            subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));  
             subtotalLabel.setForeground(SECONDARY_TEXT);
             JLabel subtotalValue = new JLabel("₱" + String.format("%.2f", getCartTotal()));
-            subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 13));  // Reduced font size from 14 to 13
+            subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 13));  
             subtotalValue.setForeground(TEXT_COLOR);
             subtotalPanel.add(subtotalLabel, BorderLayout.WEST);
             subtotalPanel.add(subtotalValue, BorderLayout.EAST);
@@ -305,30 +305,47 @@ import javax.swing.border.LineBorder;
         // Quantity controls
         JPanel quantityPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
         quantityPanel.setBackground(DARKER_BG);
-        
+
         JButton minusBtn = new JButton("-");
         minusBtn.setFont(new Font("Segoe UI", Font.BOLD, 16));
         minusBtn.setPreferredSize(new Dimension(30, 30));
         minusBtn.setBackground(new Color(60, 60, 60));
         minusBtn.setForeground(TEXT_COLOR);
-        minusBtn.setBorderPainted(false);
+        minusBtn.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
         minusBtn.setFocusPainted(false);
         minusBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        
+
         JLabel quantityLabel = new JLabel(String.valueOf(cartItem.getQuantity()));
         quantityLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
         quantityLabel.setForeground(TEXT_COLOR);
         quantityLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-        
+
         JButton plusBtn = new JButton("+");
         plusBtn.setFont(new Font("Segoe UI", Font.BOLD, 16));
         plusBtn.setPreferredSize(new Dimension(30, 30));
         plusBtn.setBackground(new Color(60, 60, 60));
         plusBtn.setForeground(TEXT_COLOR);
-        plusBtn.setBorderPainted(false);
+        plusBtn.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
         plusBtn.setFocusPainted(false);
         plusBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        
+
+        // Add action listeners for quantity buttons
+        minusBtn.addActionListener(e -> {
+            if (cartItem.getQuantity() > 1) {
+                cartItem.setQuantity(cartItem.getQuantity() - 1);
+                quantityLabel.setText(String.valueOf(cartItem.getQuantity()));
+                updateCartTotal();
+                updateCartDisplay(parentPanel, itemCountLabel);
+            }
+        });
+
+        plusBtn.addActionListener(e -> {
+            cartItem.setQuantity(cartItem.getQuantity() + 1);
+            quantityLabel.setText(String.valueOf(cartItem.getQuantity()));
+            updateCartTotal();
+            updateCartDisplay(parentPanel, itemCountLabel);
+        });
+
         quantityPanel.add(minusBtn);
         quantityPanel.add(quantityLabel);
         quantityPanel.add(plusBtn);

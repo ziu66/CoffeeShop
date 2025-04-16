@@ -139,64 +139,60 @@ public class AdminDashboard extends JFrame {
         JPanel contentPanel = new JPanel(new BorderLayout(20, 20));
         contentPanel.setBackground(new Color(40, 40, 40));
         contentPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        
+
         // Create dashboard title
         JLabel dashboardTitle = new JLabel("Administrative Controls", SwingConstants.LEFT);
         dashboardTitle.setFont(new Font("Segoe UI", Font.BOLD, 22));
         dashboardTitle.setForeground(Color.WHITE);
         dashboardTitle.setBorder(BorderFactory.createEmptyBorder(0, 10, 15, 0));
-        
+
         // Create a card panel to hold the admin function tiles
         JPanel cardPanel = new JPanel(new GridLayout(2, 2, 20, 20));
         cardPanel.setBackground(new Color(40, 40, 40));
-        
+
         // Create admin function cards
         cardPanel.add(createFunctionCard("Manage Products", "Control the products displayed to customers", "/images/products-icon.png", e -> {
-            JOptionPane.showMessageDialog(this, 
-                "Product Management will be implemented here", 
-                "Feature Coming Soon", JOptionPane.INFORMATION_MESSAGE);
+            ProductManagement productManagement = new ProductManagement(currentUser);
+            productManagement.setVisible(true);
         }));
-        
+
         cardPanel.add(createFunctionCard("Manage Orders", "View and process customer orders", "/images/orders-icon.png", e -> {
-            JOptionPane.showMessageDialog(this, 
-                "Order Management will be implemented here", 
-                "Feature Coming Soon", JOptionPane.INFORMATION_MESSAGE);
+            OrderManagement orderManagement = new OrderManagement(currentUser);
+            orderManagement.setVisible(true);
         }));
-        
+
         cardPanel.add(createFunctionCard("Manage Users", "Add, edit or disable user accounts", "/images/users-icon.png", e -> {
-            JOptionPane.showMessageDialog(this, 
-                "User Management will be implemented here", 
-                "Feature Coming Soon", JOptionPane.INFORMATION_MESSAGE);
+            UserManagement userManagement = new UserManagement(currentUser);
+            userManagement.setVisible(true);
         }));
-        
+
         cardPanel.add(createFunctionCard("View Reports", "Access sales and inventory reports", "/images/reports-icon.png", e -> {
-            JOptionPane.showMessageDialog(this, 
-                "Reports will be implemented here", 
-                "Feature Coming Soon", JOptionPane.INFORMATION_MESSAGE);
+            ReportsSystem reportsSystem = new ReportsSystem(currentUser);
+            reportsSystem.setVisible(true);
         }));
-        
+
         // Create content wrapper to hold title and cards
         JPanel contentWrapper = new JPanel(new BorderLayout(0, 15));
         contentWrapper.setBackground(new Color(40, 40, 40));
         contentWrapper.add(dashboardTitle, BorderLayout.NORTH);
         contentWrapper.add(cardPanel, BorderLayout.CENTER);
-        
+
         contentPanel.add(contentWrapper, BorderLayout.CENTER);
-        
+
         // Add a status bar at the bottom
         JPanel statusBar = new JPanel(new BorderLayout());
         statusBar.setBackground(new Color(30, 30, 30));
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 60)));
         statusBar.setPreferredSize(new Dimension(1200, 25));
-        
+
         JLabel statusLabel = new JLabel(" System Status: Online | Last Updated: " + 
                                        java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         statusLabel.setForeground(new Color(150, 150, 150));
         statusBar.add(statusLabel, BorderLayout.WEST);
-        
+
         contentPanel.add(statusBar, BorderLayout.SOUTH);
-        
+
         return contentPanel;
     }
     
