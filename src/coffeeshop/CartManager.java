@@ -23,6 +23,10 @@ import javax.swing.border.LineBorder;
         private JPanel checkoutPanel;
         private JLabel cartTotalLabel;
         private JPanel cardPanel;
+        private JLabel subtotalLabel;
+        private JLabel subtotalValue;
+        private JLabel totalValue;
+        private JLabel shippingValue;
 
         // Color scheme to match dashboard
         private final Color BACKGROUND_COLOR = new Color(40, 40, 40);
@@ -38,20 +42,23 @@ import javax.swing.border.LineBorder;
         public CartManager(User user) {
             this.currentUser = user;
             loadCartItems();
-            updateCartTotal();
         }
 
         public List<CartItem> getCartItems() {
             return cartItems;
         }
 
-        public double getCartTotal() {
+       public double getCartTotal() {
             double total = 0.0;
             for (CartItem item : cartItems) {
                 if (item.isSelected()) {
-                    total += item.getItem().getPrice() * item.getQuantity();
+                    double itemTotal = item.getItem().getPrice() * item.getQuantity();
+                    System.out.println("Adding to total: " + item.getItem().getName() + 
+                                     " x" + item.getQuantity() + " = ₱" + itemTotal); // Debug
+                    total += itemTotal;
                 }
             }
+            System.out.println("Calculated cart total: ₱" + total); // Debug
             return total;
         }
 
@@ -60,6 +67,15 @@ import javax.swing.border.LineBorder;
         }
 
         public JPanel createCartPanel(JPanel cardPanel, CardLayout cardLayout) {
+            // Add this at the beginning of createCartPanel
+            
+            this.cartTotalLabel = new JLabel("Selected Total: ₱0.00");
+            this.subtotalLabel = new JLabel("Subtotal (0 items)");
+            this.subtotalValue = new JLabel("₱0.00");
+            this.totalValue = new JLabel("₱0.00");
+            cartTotalLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+            cartTotalLabel.setForeground(TEXT_COLOR);
+
             JPanel cartPanel = new JPanel(new BorderLayout());
             cartPanel.setBackground(BACKGROUND_COLOR);
             cartPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -107,7 +123,9 @@ import javax.swing.border.LineBorder;
                     boolean selected = selectAll.isSelected();
                     cartItems.forEach(item -> item.setSelected(selected));
                     updateCartDisplay(itemsPanel, itemCountLabel);
+                    updateCartTotal();
                 });
+
                 selectAllPanel.add(selectAll);
                 itemsPanel.add(selectAllPanel);
                 itemsPanel.add(Box.createVerticalStrut(5));
@@ -131,96 +149,89 @@ import javax.swing.border.LineBorder;
             summaryPanel.setBackground(DARKER_BG);
             summaryPanel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR),
-                BorderFactory.createEmptyBorder(15, 15, 15, 15) 
+                BorderFactory.createEmptyBorder(8, 15, 8, 15)  // Reduced padding from 15px to 8px
             ));
 
             // Subtotal - More compact layout
             JPanel subtotalPanel = new JPanel(new BorderLayout());
             subtotalPanel.setBackground(DARKER_BG);
-            subtotalPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));  
-            JLabel subtotalLabel = new JLabel("Subtotal (" + getSelectedItemCount() + " items)");
-            subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));  
+            subtotalPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
+            subtotalLabel = new JLabel("Subtotal (0 items)");
+            subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
             subtotalLabel.setForeground(SECONDARY_TEXT);
-            JLabel subtotalValue = new JLabel("₱" + String.format("%.2f", getCartTotal()));
-            subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 13));  
+            subtotalValue = new JLabel("₱" + String.format("%.2f", getCartTotal()));  // Initialize with act
+            subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 13));
             subtotalValue.setForeground(TEXT_COLOR);
             subtotalPanel.add(subtotalLabel, BorderLayout.WEST);
             subtotalPanel.add(subtotalValue, BorderLayout.EAST);
             summaryPanel.add(subtotalPanel);
 
-            // Shipping fee - Reduced vertical spacing
-            JPanel shippingPanel = new JPanel(new BorderLayout());
-            shippingPanel.setBackground(DARKER_BG);
-            shippingPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));  // Reduced from 10px to 5px
-            JLabel shippingLabel = new JLabel("Shipping Fee");
-            shippingLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));  // Reduced font size
-            shippingLabel.setForeground(SECONDARY_TEXT);
-            JLabel shippingValue = new JLabel("₱40.00");
-            shippingValue.setFont(new Font("Segoe UI", Font.BOLD, 13));  // Reduced font size
-            shippingValue.setForeground(TEXT_COLOR);
-            shippingPanel.add(shippingLabel, BorderLayout.WEST);
-            shippingPanel.add(shippingValue, BorderLayout.EAST);
-            summaryPanel.add(shippingPanel);
-
             // Voucher code
             JPanel voucherPanel = new JPanel(new BorderLayout(5, 0));
             voucherPanel.setBackground(DARKER_BG);
-            voucherPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
+            voucherPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0)); // Reduced padding
 
             JLabel voucherTitleLabel = new JLabel("Enter Voucher Code");
             voucherTitleLabel.setForeground(SECONDARY_TEXT);
-            voucherTitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            voucherTitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11)); // Smaller font
 
             JTextField voucherField = new JTextField();
             voucherField.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
             voucherField.setBackground(new Color(50, 50, 50));
             voucherField.setForeground(TEXT_COLOR);
             voucherField.setCaretColor(TEXT_COLOR);
-
+            voucherField.setPreferredSize(new Dimension(150, 22)); // Smaller input field
+            voucherField.setMaximumSize(new Dimension(150, 22));
+            
             JButton applyBtn = new JButton("APPLY");
             applyBtn.setBackground(SUCCESS_COLOR);
             applyBtn.setForeground(Color.WHITE);
-            applyBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            applyBtn.setFont(new Font("Segoe UI", Font.BOLD, 10)); // Smaller font
             applyBtn.setBorderPainted(false);
             applyBtn.setFocusPainted(false);
+            applyBtn.setPreferredSize(new Dimension(60, 22)); // Smaller button
+            applyBtn.setMaximumSize(new Dimension(60, 22));
 
             voucherPanel.add(voucherTitleLabel, BorderLayout.NORTH);
             voucherPanel.add(voucherField, BorderLayout.CENTER);
             voucherPanel.add(applyBtn, BorderLayout.EAST);
             summaryPanel.add(voucherPanel);
-            summaryPanel.add(Box.createVerticalStrut(10));
+            summaryPanel.add(Box.createVerticalStrut(5)); // Reduced spacing (was 10)
 
+            JPanel voucherInputPanel = new JPanel(new BorderLayout(5, 0));
+            voucherInputPanel.setBackground(DARKER_BG);
+            voucherInputPanel.add(voucherField, BorderLayout.CENTER);
+            voucherInputPanel.add(applyBtn, BorderLayout.EAST);
+
+            JLabel voucherLabel = new JLabel("Voucher:");
+            voucherLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            voucherLabel.setForeground(SECONDARY_TEXT);
+
+            voucherPanel.add(voucherLabel, BorderLayout.WEST);
+            voucherPanel.add(voucherInputPanel, BorderLayout.CENTER);
+            summaryPanel.add(voucherPanel);
             // Total
             JPanel totalPanel = new JPanel(new BorderLayout());
             totalPanel.setBackground(DARKER_BG);
-            totalPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 20, 0));
+            totalPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
             JLabel totalLabel = new JLabel("Total");
             totalLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
             totalLabel.setForeground(TEXT_COLOR);
-            JLabel totalValue = new JLabel("₱" + String.format("%.2f", getCartTotal() + 40.00));
+            totalValue = new JLabel("₱" + String.format("%.2f", getCartTotal())); // Remove the + 60.00
             totalValue.setFont(new Font("Segoe UI", Font.BOLD, 16));
             totalValue.setForeground(ACCENT_COLOR);
             totalPanel.add(totalLabel, BorderLayout.WEST);
             totalPanel.add(totalValue, BorderLayout.EAST);
             summaryPanel.add(totalPanel);
 
-            // VAT notice
-            JLabel vatLabel = new JLabel("VAT included, where applicable");
-            vatLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-            vatLabel.setForeground(SECONDARY_TEXT);
-            vatLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-            summaryPanel.add(vatLabel);
-            summaryPanel.add(Box.createVerticalStrut(15));
-
-            // Checkout button - Improved for better clickability
-            JButton checkoutBtn = new JButton("PROCEED TO CHECKOUT →");
+            JButton checkoutBtn = new JButton("CHECKOUT");
             checkoutBtn.setBackground(BUTTON_COLOR);
             checkoutBtn.setForeground(Color.WHITE);
-            checkoutBtn.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            checkoutBtn.setFont(new Font("Segoe UI", Font.BOLD, 16)); // Smaller font
             checkoutBtn.setBorderPainted(false);
             checkoutBtn.setFocusPainted(false);
-            checkoutBtn.setCursor(new Cursor(Cursor.HAND_CURSOR)); // Change cursor to hand on hover
-            checkoutBtn.setPreferredSize(new Dimension(250, 40));
+            checkoutBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            checkoutBtn.setPreferredSize(new Dimension(200, 40)); // Smaller button
 
             // Add hover effect for better UX
             checkoutBtn.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -230,10 +241,10 @@ import javax.swing.border.LineBorder;
                 public void mouseExited(java.awt.event.MouseEvent evt) {
                     checkoutBtn.setBackground(BUTTON_COLOR);
                 }
-            });
+            }); 
 
             // In createCartPanel method, modify the checkout button action listener:
-            checkoutBtn.addActionListener(e -> {
+           checkoutBtn.addActionListener(e -> {
                 if (getSelectedItemCount() > 0) {
                     cardLayout.show(cardPanel, "checkout");
                 } else {
@@ -243,14 +254,46 @@ import javax.swing.border.LineBorder;
                         JOptionPane.WARNING_MESSAGE);
                 }
             });
-            JPanel buttonContainer = new JPanel(new FlowLayout(FlowLayout.CENTER));
+           
+            JPanel buttonContainer = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 5)); // Reduced vertical gap
             buttonContainer.setBackground(DARKER_BG);
             buttonContainer.add(checkoutBtn);
             summaryPanel.add(buttonContainer);
-
             cartPanel.add(summaryPanel, BorderLayout.SOUTH);
 
+            updateSummary();
             return cartPanel;
+        }
+        
+        private void updateSummary() {
+            SwingUtilities.invokeLater(() -> {
+                int selectedCount = getSelectedItemCount();
+                double subtotal = getCartTotal();
+
+                // Debug to verify we have the right references
+                System.out.println("subtotalLabel: " + (this.subtotalLabel != null));
+                System.out.println("subtotalValue: " + (this.subtotalValue != null));
+                System.out.println("totalValue: " + (this.totalValue != null));
+
+                if (this.subtotalLabel != null) {
+                    this.subtotalLabel.setText("Subtotal (" + selectedCount + " items)");
+                }
+                if (this.subtotalValue != null) {
+                    this.subtotalValue.setText("₱" + String.format("%.2f", subtotal));
+                }
+                if (this.totalValue != null) {
+                    this.totalValue.setText("₱" + String.format("%.2f", subtotal));
+                }
+                if (this.cartTotalLabel != null) {
+                    this.cartTotalLabel.setText("Selected Total: ₱" + String.format("%.2f", subtotal));
+                }
+
+                // Force UI update if we have a card panel reference
+                if (this.cardPanel != null) {
+                    this.cardPanel.revalidate();
+                    this.cardPanel.repaint();
+                }
+            });
         }
 
     private JPanel createCartItemPanel(CartItem cartItem, JPanel parentPanel, JLabel itemCountLabel) {
@@ -270,10 +313,11 @@ import javax.swing.border.LineBorder;
         selectBox.setBackground(DARKER_BG);
         selectBox.addActionListener(e -> {
             cartItem.setSelected(selectBox.isSelected());
+            System.out.println(cartItem.getItem().getName() + " selected: " + selectBox.isSelected()); // Debug
             updateCartDisplay(parentPanel, itemCountLabel);
-            updateCartTotal(); 
+            updateSummary(); // Make sure summary updates when items are selected/deselected
         });
-
+        
         JPanel infoPanel = new JPanel();
         infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
         infoPanel.setBackground(DARKER_BG);
@@ -334,7 +378,7 @@ import javax.swing.border.LineBorder;
             if (cartItem.getQuantity() > 1) {
                 cartItem.setQuantity(cartItem.getQuantity() - 1);
                 quantityLabel.setText(String.valueOf(cartItem.getQuantity()));
-                updateCartTotal();
+                updateSummary(); // Update summary when quantity changes
                 updateCartDisplay(parentPanel, itemCountLabel);
             }
         });
@@ -342,10 +386,10 @@ import javax.swing.border.LineBorder;
         plusBtn.addActionListener(e -> {
             cartItem.setQuantity(cartItem.getQuantity() + 1);
             quantityLabel.setText(String.valueOf(cartItem.getQuantity()));
-            updateCartTotal();
+            updateSummary(); // Update summary when quantity changes
             updateCartDisplay(parentPanel, itemCountLabel);
         });
-
+        
         quantityPanel.add(minusBtn);
         quantityPanel.add(quantityLabel);
         quantityPanel.add(plusBtn);
@@ -362,7 +406,7 @@ import javax.swing.border.LineBorder;
             removeCartItem(cartItem.getItem().getProductId());
             cartItems.remove(cartItem);
             updateCartDisplay(parentPanel, itemCountLabel);
-            updateCartTotal();
+            updateSummary(); // Update summary when item is removed
         });
 
         JPanel buttonPanel = new JPanel(new BorderLayout());
@@ -402,24 +446,30 @@ import javax.swing.border.LineBorder;
             selectAll.setFont(new Font("Segoe UI", Font.BOLD, 14));
             selectAll.setForeground(TEXT_COLOR);
             selectAll.setBackground(DARKER_BG);
+
+            // Set the initial state based on whether all items are selected
+            boolean allSelected = !cartItems.isEmpty() && cartItems.stream().allMatch(CartItem::isSelected);
+            selectAll.setSelected(allSelected);
+
             selectAll.addActionListener(e -> {
                 boolean selected = selectAll.isSelected();
                 cartItems.forEach(item -> item.setSelected(selected));
                 updateCartDisplay(itemsPanel, itemCountLabel);
+                updateSummary(); // Update the summary when selection changes
             });
+
             selectAllPanel.add(selectAll);
-            updateCartTotal();
             itemsPanel.add(selectAllPanel);
             itemsPanel.add(Box.createVerticalStrut(10));
 
-            // Add cart items
+            // Add cart items - only create panels for selected items if needed
             for (CartItem item : cartItems) {
                 itemsPanel.add(createCartItemPanel(item, itemsPanel, itemCountLabel));
                 itemsPanel.add(Box.createVerticalStrut(10));
             }
         }
 
-        itemCountLabel.setText(cartItems.size() + " item(s)");
+        updateSummary(); // Add this line to ensure summary updates with display
         itemsPanel.revalidate();
         itemsPanel.repaint();
     }
@@ -483,11 +533,16 @@ import javax.swing.border.LineBorder;
         deliveryMethodPanel.add(Box.createVerticalStrut(15));
 
         ButtonGroup deliveryGroup = new ButtonGroup();
-        JRadioButton deliveryBtn = createStyledRadioButton("Delivery (₱40.00)", true);
-        JRadioButton pickupBtn = createStyledRadioButton("Pickup (Free)", false);
         
+        JRadioButton deliveryBtn = createStyledRadioButton("Delivery (₱60.00)", true);
+        JRadioButton pickupBtn = createStyledRadioButton("Pickup (Free)", false);
+
+        deliveryBtn.addActionListener(e -> updateCheckoutTotals(true));
+        pickupBtn.addActionListener(e -> updateCheckoutTotals(false));
+
         deliveryGroup.add(deliveryBtn);
         deliveryGroup.add(pickupBtn);
+        
         
         JPanel deliveryBtnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         deliveryBtnPanel.setBackground(DARKER_BG);
@@ -550,25 +605,26 @@ import javax.swing.border.LineBorder;
         gbc.weightx = 0.5;
         contentPanel.add(addressPanel, gbc);
 
-        // Order summary
         JPanel summaryPanel = new JPanel();
         summaryPanel.setLayout(new BoxLayout(summaryPanel, BoxLayout.Y_AXIS));
         summaryPanel.setBackground(DARKER_BG);
         summaryPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR),
-            BorderFactory.createEmptyBorder(10, 15, 10, 15)  // Further reduce padding
+            BorderFactory.createEmptyBorder(8, 15, 8, 15)
         ));
-
+        
+        JPanel priceDetailsPanel = new JPanel(new GridLayout(2, 1, 0, 2)); // 2 rows, 1 column with 2px gap
+        priceDetailsPanel.setBackground(DARKER_BG);
+        
         JLabel summaryTitle = new JLabel("Order Summary");
         summaryTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         summaryTitle.setForeground(TEXT_COLOR);
         summaryPanel.add(summaryTitle);
         summaryPanel.add(Box.createVerticalStrut(8));
 
-        // Add order items with dividers
         boolean firstItem = true;
         for (CartItem item : cartItems) {
-            if (item.isSelected()) {
+            if (item.isSelected()) { 
                 if (!firstItem) {
                     JSeparator separator = new JSeparator();
                     separator.setForeground(BORDER_COLOR);
@@ -576,7 +632,7 @@ import javax.swing.border.LineBorder;
                     summaryPanel.add(separator);
                     summaryPanel.add(Box.createVerticalStrut(10));
                 }
-                
+
                 JPanel itemPanel = new JPanel(new BorderLayout());
                 itemPanel.setBackground(DARKER_BG);
                 itemPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
@@ -593,88 +649,67 @@ import javax.swing.border.LineBorder;
                 itemPanel.add(itemPrice, BorderLayout.EAST);
                 summaryPanel.add(itemPanel);
                 summaryPanel.add(Box.createVerticalStrut(5));
-                
+
                 firstItem = false;
             }
         }
 
         summaryPanel.add(Box.createVerticalStrut(10));
         
-        // Add a divider before totals
         JSeparator totalsSeparator = new JSeparator();
         totalsSeparator.setForeground(BORDER_COLOR);
         totalsSeparator.setBackground(BORDER_COLOR);
         summaryPanel.add(totalsSeparator);
         summaryPanel.add(Box.createVerticalStrut(10));
 
-        // Subtotal
         JPanel subtotalPanel = new JPanel(new BorderLayout());
         subtotalPanel.setBackground(DARKER_BG);
-        subtotalPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
-
         JLabel subtotalLabel = new JLabel("Subtotal (" + getSelectedItemCount() + " items)");
-        subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         subtotalLabel.setForeground(SECONDARY_TEXT);
-
-        JLabel subtotalValue = new JLabel("₱" + String.format("%.2f", getCartTotal()));
-        subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        subtotalValue = new JLabel("₱" + String.format("%.2f", getCartTotal()));
+        subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
         subtotalValue.setForeground(TEXT_COLOR);
-
         subtotalPanel.add(subtotalLabel, BorderLayout.WEST);
         subtotalPanel.add(subtotalValue, BorderLayout.EAST);
         summaryPanel.add(subtotalPanel);
 
-        // Shipping fee - with reference to delivery method
         JPanel shippingPanel = new JPanel(new BorderLayout());
         shippingPanel.setBackground(DARKER_BG);
-        shippingPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
-
         JLabel shippingLabel = new JLabel("Shipping Fee");
-        shippingLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        shippingLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         shippingLabel.setForeground(SECONDARY_TEXT);
-
-        JLabel shippingValue = new JLabel("₱40.00");
-        shippingValue.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        shippingValue = new JLabel("₱60.00"); // Default to delivery
+        shippingValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
         shippingValue.setForeground(TEXT_COLOR);
-        
-        deliveryBtn.addActionListener(e -> {
-        shippingValue.setText("₱40.00");
-                updateOrderTotal(shippingValue, subtotalValue.getText());
-        });
-        
-        pickupBtn.addActionListener(e -> {
-            shippingValue.setText("₱0.00");
-            updateOrderTotal(shippingValue, subtotalValue.getText());
-        });
-
         shippingPanel.add(shippingLabel, BorderLayout.WEST);
         shippingPanel.add(shippingValue, BorderLayout.EAST);
         summaryPanel.add(shippingPanel);
+        
+        priceDetailsPanel.add(subtotalPanel);
+        priceDetailsPanel.add(shippingPanel);
+        summaryPanel.add(priceDetailsPanel);
 
-        // Total
         JPanel totalPanel = new JPanel(new BorderLayout());
         totalPanel.setBackground(DARKER_BG);
         totalPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-
         JLabel totalLabel = new JLabel("Total");
         totalLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
         totalLabel.setForeground(TEXT_COLOR);
-
-        JLabel totalValue = new JLabel("₱" + String.format("%.2f", getCartTotal() + 40.00));
+        totalValue = new JLabel("₱" + String.format("%.2f", getCartTotal()));  // Remove the + 60.00
         totalValue.setFont(new Font("Segoe UI", Font.BOLD, 16));
         totalValue.setForeground(ACCENT_COLOR);
-
         totalPanel.add(totalLabel, BorderLayout.WEST);
         totalPanel.add(totalValue, BorderLayout.EAST);
         summaryPanel.add(totalPanel);
-        
+
+
         gbc.gridx = 1;
         gbc.gridy = 1;
         gbc.gridwidth = 1;
         gbc.weightx = 0.5;
         contentPanel.add(summaryPanel, gbc);
 
-        // Payment method
         JPanel paymentPanel = new JPanel();
         paymentPanel.setLayout(new BoxLayout(paymentPanel, BoxLayout.Y_AXIS));
         paymentPanel.setBackground(DARKER_BG);
@@ -721,7 +756,6 @@ import javax.swing.border.LineBorder;
         gbc.weightx = 1.0;
         contentPanel.add(paymentPanel, gbc);
 
-        // Card input fields (hidden by default)
         JPanel cardDetailsPanel = new JPanel();
         cardDetailsPanel.setLayout(new BoxLayout(cardDetailsPanel, BoxLayout.Y_AXIS));
         cardDetailsPanel.setBackground(DARKER_BG);
@@ -736,8 +770,7 @@ import javax.swing.border.LineBorder;
         cardDetailsTitle.setForeground(TEXT_COLOR);
         cardDetailsPanel.add(cardDetailsTitle);
         cardDetailsPanel.add(Box.createVerticalStrut(15));
-
-        // Card number
+        
         JLabel cardNumberLabel = new JLabel("Card Number");
         cardNumberLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         cardNumberLabel.setForeground(TEXT_COLOR);
@@ -753,7 +786,6 @@ import javax.swing.border.LineBorder;
         cardDetailsPanel.add(cardNumberField);
         cardDetailsPanel.add(Box.createVerticalStrut(10));
 
-        // Name on card
         JLabel nameOnCardLabel = new JLabel("Name on Card");
         nameOnCardLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         nameOnCardLabel.setForeground(TEXT_COLOR);
@@ -769,11 +801,9 @@ import javax.swing.border.LineBorder;
         cardDetailsPanel.add(nameOnCardField);
         cardDetailsPanel.add(Box.createVerticalStrut(10));
 
-        // Expiry and CVV in a row
         JPanel expiryAndCvvPanel = new JPanel(new GridLayout(1, 2, 10, 0));
         expiryAndCvvPanel.setBackground(DARKER_BG);
 
-        // Expiry
         JPanel expiryPanel = new JPanel();
         expiryPanel.setLayout(new BoxLayout(expiryPanel, BoxLayout.Y_AXIS));
         expiryPanel.setBackground(DARKER_BG);
@@ -792,7 +822,6 @@ import javax.swing.border.LineBorder;
         expiryField.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
         expiryPanel.add(expiryField);
 
-        // CVV
         JPanel cvvPanel = new JPanel();
         cvvPanel.setLayout(new BoxLayout(cvvPanel, BoxLayout.Y_AXIS));
         cvvPanel.setBackground(DARKER_BG);
@@ -820,7 +849,6 @@ import javax.swing.border.LineBorder;
         gbc.gridwidth = 2;
         contentPanel.add(cardDetailsPanel, gbc);
 
-        // E-wallet input fields (hidden by default)
         JPanel walletDetailsPanel = new JPanel();
         walletDetailsPanel.setLayout(new BoxLayout(walletDetailsPanel, BoxLayout.Y_AXIS));
         walletDetailsPanel.setBackground(DARKER_BG);
@@ -836,7 +864,6 @@ import javax.swing.border.LineBorder;
         walletDetailsPanel.add(walletDetailsTitle);
         walletDetailsPanel.add(Box.createVerticalStrut(15));
 
-        // E-wallet provider
         JLabel walletProviderLabel = new JLabel("E-Wallet Provider");
         walletProviderLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         walletProviderLabel.setForeground(TEXT_COLOR);
@@ -852,7 +879,6 @@ import javax.swing.border.LineBorder;
         walletDetailsPanel.add(walletProviderDropdown);
         walletDetailsPanel.add(Box.createVerticalStrut(10));
 
-        // Mobile number
         JLabel mobileNumberLabel = new JLabel("Mobile Number");
         mobileNumberLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         mobileNumberLabel.setForeground(TEXT_COLOR);
@@ -872,7 +898,6 @@ import javax.swing.border.LineBorder;
         gbc.gridwidth = 2;
         contentPanel.add(walletDetailsPanel, gbc);
 
-        // Payment method button listeners
         cardBtn.addActionListener(e -> {
             cardDetailsPanel.setVisible(true);
             walletDetailsPanel.setVisible(false);
@@ -894,14 +919,12 @@ import javax.swing.border.LineBorder;
             contentPanel.repaint();
         });
 
-        // Add a scrollable container for content
         JScrollPane scrollPane = new JScrollPane(contentPanel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         scrollPane.getViewport().setBackground(BACKGROUND_COLOR);
         checkoutPanel.add(scrollPane, BorderLayout.CENTER);
 
-        // Place order button
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         buttonPanel.setBackground(BACKGROUND_COLOR);
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
@@ -933,12 +956,27 @@ import javax.swing.border.LineBorder;
         buttonPanel.add(placeOrderBtn);
         checkoutPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Store checkout panel for later reference
         this.checkoutPanel = checkoutPanel;
+        updateCheckoutTotals(true);
         
         return checkoutPanel;
     }
                 
+    private void updateCheckoutTotals(boolean isDelivery) {
+        double subtotal = getCartTotal();
+        double shipping = isDelivery ? 60.00 : 0.00;
+        double total = subtotal + shipping;
+
+        if (subtotalValue != null) {
+            subtotalValue.setText("₱" + String.format("%.2f", subtotal));
+        }
+        if (shippingValue != null) {
+            shippingValue.setText(isDelivery ? "₱60.00" : "₱0.00");
+        }
+        if (totalValue != null) {
+            totalValue.setText("₱" + String.format("%.2f", total));
+        }
+    }
     
     private JRadioButton createStyledRadioButton(String text, boolean selected) {
         JRadioButton radioButton = new JRadioButton(text);
@@ -1088,8 +1126,8 @@ import javax.swing.border.LineBorder;
         }
         
         System.out.println("Total: ₱" + String.format("%.2f", getCartTotal()));
-        System.out.println("Shipping: ₱40.00");
-        System.out.println("Grand Total: ₱" + String.format("%.2f", getCartTotal() + 40.00));
+        System.out.println("Shipping: ₱60.00");
+        System.out.println("Grand Total: ₱" + String.format("%.2f", getCartTotal() + 60.00));
     }
     
     private int getSelectedItemCount() {
@@ -1165,7 +1203,7 @@ import javax.swing.border.LineBorder;
                 // Add to local cart items
                 CartItem newItem = new CartItem(product);
                 newItem.setQuantity(quantity);
-                newItem.setSelected(true);
+                newItem.setSelected(false); // Changed from true to false
                 cartItems.add(newItem);
             }
 
@@ -1187,10 +1225,9 @@ import javax.swing.border.LineBorder;
         cartItems.clear();
 
         try (Connection conn = DBConnection.getConnection()) {
-            // First get the active cart
             String cartQuery = "SELECT ci.* FROM cart_items ci " +
-                                "JOIN carts c ON ci.cart_id = c.cart_id " +
-                                "WHERE c.user_id = ?";
+                              "JOIN carts c ON ci.cart_id = c.cart_id " +
+                              "WHERE c.user_id = ?";
             PreparedStatement cartPS = conn.prepareStatement(cartQuery);
             cartPS.setInt(1, currentUser.getUserId());
             ResultSet cartRS = cartPS.executeQuery();
@@ -1198,11 +1235,10 @@ import javax.swing.border.LineBorder;
             if (cartRS.next()) {
                 currentCartId = cartRS.getInt("cart_id");
 
-                // Now load cart items
-                    String itemsQuery = "SELECT ci.*, p.name, p.description, p.price, p.category " +
-                                        "FROM cart_items ci " +
-                                        "JOIN products p ON ci.product_id = p.product_id " +
-                                        "WHERE ci.cart_id = ?";
+                String itemsQuery = "SELECT ci.*, p.name, p.description, p.price, p.category " +
+                                   "FROM cart_items ci " +
+                                   "JOIN products p ON ci.product_id = p.product_id " +
+                                   "WHERE ci.cart_id = ?";
                 PreparedStatement itemsPS = conn.prepareStatement(itemsQuery);
                 itemsPS.setInt(1, currentCartId);
                 ResultSet itemsRS = itemsPS.executeQuery();
@@ -1212,12 +1248,12 @@ import javax.swing.border.LineBorder;
                         itemsRS.getInt("product_id"),
                         itemsRS.getString("name"),
                         itemsRS.getDouble("price"),
-                        itemsRS.getString("description") // Using description instead of image_path
+                        itemsRS.getString("description")
                     );
 
                     CartItem item = new CartItem(menuItem);
                     item.setQuantity(itemsRS.getInt("quantity"));
-                    item.setSelected(true);
+                    item.setSelected(false); // Explicitly set to false
                     cartItems.add(item);
                 }
             }
