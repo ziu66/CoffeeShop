@@ -41,7 +41,7 @@ public class LoginForm extends JFrame {
         setSize(550, 800); // Maintained overall form size
         setLocationRelativeTo(null);
         
-        // Main panel with dark theme
+        // Main panel with  dark theme
         JPanel mainPanel = new JPanel(new BorderLayout());
         mainPanel.setBackground(new Color(30, 30, 30)); // Dark background
         

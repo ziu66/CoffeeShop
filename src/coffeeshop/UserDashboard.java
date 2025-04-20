@@ -16,6 +16,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.ArrayList;
+import javax.swing.border.Border;
 
 
 public class UserDashboard extends JFrame {
@@ -36,43 +37,42 @@ public class UserDashboard extends JFrame {
     public UserDashboard(User user) {
         this.currentUser = user;
         this.cartManager = new CartManager(user);
+        this.cardLayout = new CardLayout(); // Initialize as instance variable
+        this.cardPanel = new JPanel(cardLayout); // Initialize as instance variable
         initializeUI();
     }
 
     private void initializeUI() {
-        // 1. Create main panel - this will be the root container
         mainPanel = new JPanel(new BorderLayout());
-        mainPanel.setBackground(new Color(40, 40, 40)); // Dark background to match admin theme
+        mainPanel.setBackground(new Color(40, 40, 40));
 
-        // 2. Create card panel with card layout - this will hold all views
-        cardLayout = new CardLayout();
-        cardPanel = new JPanel(cardLayout);
-        cardPanel.setBackground(new Color(40, 40, 40)); // Dark background
+        // Initialize card panel
+        cardPanel.setBackground(new Color(40, 40, 40));
 
-        // 3. Create all content panels FIRST (as separate instances)
+        // Create content panels
         JPanel menuPanel = createMenuContent();
         JPanel merchPanel = createMerchandiseContent();
         JPanel rewardsPanel = createRewardsContent();
         JPanel cartPanel = createCartContent();
 
-        // 4. Add content panels to card panel (NOT to mainPanel)
+        // Add panels to cardPanel
         cardPanel.add(menuPanel, "menu");
         cardPanel.add(merchPanel, "merchandise");
         cardPanel.add(rewardsPanel, "rewards");
         cardPanel.add(cartPanel, "cart");
+        cardPanel.add(cartManager.createOrderConfirmationPanel(cardPanel, cardLayout), "orderConfirmation");
+        cardPanel.add(cartManager.createCheckoutPanel(cardPanel, cardLayout), "checkout");
 
-        // Create checkout panel and add it to cardPanel directly
-        JPanel checkoutPanel = cartManager.createCheckoutPanel(cardPanel, cardLayout);
-        cardPanel.add(checkoutPanel, "checkout");
-
-        // 5. Add card panel to main panel
         mainPanel.add(cardPanel, BorderLayout.CENTER);
 
-        // 6. Create and add header panel
+        // Create header panel (which initializes navButtons)
         headerPanel = createHeaderPanel();
         mainPanel.add(headerPanel, BorderLayout.NORTH);
 
-        // 7. Frame setup - only set content pane once
+        // Set initial state AFTER everything is initialized
+        updateActiveButton(0);
+        cardLayout.show(cardPanel, "menu");
+
         setContentPane(mainPanel);
         setTitle("But First, Coffee - " + currentUser.getFullName());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -89,14 +89,12 @@ public class UserDashboard extends JFrame {
         panel.setBackground(Color.BLACK);
         panel.setPreferredSize(new Dimension(1200, 250));
 
-        // 1. Top Welcome Message (Optional)
         JLabel welcomeLabel = new JLabel("Welcome, " + currentUser.getFullName(), SwingConstants.CENTER);
         welcomeLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         welcomeLabel.setForeground(new Color(218, 165, 32)); // Gold color to match admin theme
         welcomeLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
         panel.add(welcomeLabel, BorderLayout.NORTH);
 
-        // 2. Animated GIF (Center)
         JPanel gifContainer = new JPanel(new BorderLayout());
         gifContainer.setBackground(Color.BLACK);
 
@@ -121,7 +119,6 @@ public class UserDashboard extends JFrame {
         }
         panel.add(gifContainer, BorderLayout.CENTER);
 
-        // 3. Navigation Bar (Bottom)
         JPanel navBar = new JPanel(new BorderLayout());
         navBar.setBackground(Color.BLACK);
         navBar.setPreferredSize(new Dimension(1200, 50));
@@ -147,24 +144,16 @@ public class UserDashboard extends JFrame {
         String[] navItems = {"MENU", "MERCHANDISE", "REWARDS", "CART"};
         navButtons = new JButton[navItems.length];
 
-        // Cart item counter
-        cartCounter = new JLabel("0");
-        cartCounter.setFont(new Font("Arial", Font.BOLD, 10));
-        cartCounter.setForeground(Color.BLACK);
-        cartCounter.setBackground(new Color(218, 165, 32)); // Gold color
-        cartCounter.setOpaque(true);
-        cartCounter.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
-        cartCounter.setVisible(false);
-
         for (int i = 0; i < navItems.length; i++) {
             navButtons[i] = new JButton(navItems[i]);
             navButtons[i].setForeground(Color.WHITE);
             navButtons[i].setBackground(Color.BLACK);
-            navButtons[i].setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+            navButtons[i].setBorder(BorderFactory.createEmptyBorder(0, 15, 8, 15)); // Initial inactive state
             navButtons[i].setFont(new Font("Arial", Font.BOLD, 14));
             navButtons[i].setContentAreaFilled(false);
             navButtons[i].setFocusPainted(false);
-
+            
+            
             if (navItems[i].equals("CART")) {
                 try {
                     URL cartIconUrl = getClass().getResource("/images/cart-icon.png");
@@ -175,44 +164,30 @@ public class UserDashboard extends JFrame {
                 } catch (Exception e) {
                     System.err.println("Couldn't load cart icon: " + e.getMessage());
                 }
-
-                navButtons[i].addActionListener(e -> cardLayout.show(cardPanel, "cart"));
-
-                JPanel cartPanel = new JPanel(new BorderLayout());
-                cartPanel.setOpaque(false);
-                cartPanel.add(navButtons[i], BorderLayout.CENTER);
-                cartPanel.add(cartCounter, BorderLayout.NORTH);
-                navContent.add(cartPanel);
-                continue;
             }
 
-            // Hover effects
+            final int buttonIndex = i;
+    
             navButtons[i].addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
                     JButton source = (JButton)evt.getSource();
-                    source.setForeground(new Color(218, 165, 32)); // Gold color on hover
-                    if (source.getText().equals("CART")) {
-                        source.setBorder(BorderFactory.createLineBorder(new Color(218, 165, 32), 1));
+                    if (currentActiveIndex != buttonIndex) {
+                        source.setForeground(new Color(218, 165, 32));
                     }
                 }
                 public void mouseExited(java.awt.event.MouseEvent evt) {
                     JButton source = (JButton)evt.getSource();
-                    source.setForeground(Color.WHITE);
-                    source.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+                    if (currentActiveIndex != buttonIndex) {
+                        source.setForeground(Color.WHITE);
+                    }
                 }
             });
 
             final int index = i;
             navButtons[i].addActionListener(e -> {
-                if (navItems[index].equals("CART")) {
-                    cardLayout.show(cardPanel, "cart");
-                    updateActiveButton(index);
-                } else {
-                    updateActiveButton(index);
-                    // Map navigation items to card names
-                    String cardName = navItems[index].toLowerCase();
-                    cardLayout.show(cardPanel, cardName);
-                }
+                updateActiveButton(index);
+                String cardName = navItems[index].toLowerCase();
+                cardLayout.show(cardPanel, cardName);
             });
 
             navContent.add(navButtons[i]);
@@ -269,10 +244,17 @@ public class UserDashboard extends JFrame {
         currentActiveIndex = activeIndex;
 
         for (int i = 0; i < navButtons.length; i++) {
-            if (i == activeIndex && !navButtons[i].getText().equals("CART")) {
-                navButtons[i].setBorder(BorderFactory.createMatteBorder(0, 0, 3, 0, new Color(218, 165, 32))); // Gold underline
+            JButton button = navButtons[i];
+            if (i == activeIndex) {
+                // Create compound border with empty side borders
+                button.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createEmptyBorder(0, 15, 5, 15),
+                    BorderFactory.createMatteBorder(0, 0, 3, 0, new Color(218, 165, 32))
+                ));
+                button.setForeground(new Color(218, 165, 32));
             } else {
-                navButtons[i].setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+                button.setBorder(BorderFactory.createEmptyBorder(0, 15, 8, 15));
+                button.setForeground(Color.WHITE);
             }
         }
     }
@@ -522,11 +504,6 @@ public class UserDashboard extends JFrame {
 
         addButton.addActionListener(e -> {
             cartManager.addToCart(item, 1); // Add quantity parameter
-            updateCartTotalAndCounter();
-            JOptionPane.showMessageDialog(this, 
-                item.getName() + " added to cart.",
-                "Added to Cart", 
-                JOptionPane.INFORMATION_MESSAGE);
         });
 
         // Add components to the item panel
@@ -584,14 +561,6 @@ public class UserDashboard extends JFrame {
         }
 
         return items;
-    }
-    
-    private void updateCartTotalAndCounter() {
-        int totalCount = cartManager.getCartItems().size();
-        if (cartCounter != null) {
-            cartCounter.setText(String.valueOf(totalCount));
-            cartCounter.setVisible(totalCount > 0);
-        }
     }
     
     private JPanel createMerchandiseContent() {

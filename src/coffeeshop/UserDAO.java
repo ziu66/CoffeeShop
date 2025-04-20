@@ -10,8 +10,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class UserDAO {
-    // Remove authenticateUser() since we're not using username anymore
-    // Remove isUsernameTaken() since we're not using username anymore
     
     public User authenticateUserByEmail(String email, String password) {
         String sql = "SELECT * FROM users WHERE email = ? AND password = ?"; // Removed SHA2
