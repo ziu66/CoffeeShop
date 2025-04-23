@@ -6,6 +6,7 @@ package coffeeshop;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import javax.swing.JOptionPane;
 import javax.swing.border.LineBorder;
+import javax.swing.plaf.basic.BasicComboBoxUI;
 
     public class CartManager {
         private final User currentUser;
@@ -32,6 +34,10 @@ import javax.swing.border.LineBorder;
         private JLabel checkoutShippingValue;
         private JLabel checkoutTotalValue;
         private CardLayout cardLayout;  // Add this field
+        private static final int POINTS_PER_500_PESOS = 50;
+        private JLabel rewardPointsLabel;
+        private JLabel rewardDiscountLabel;
+        private double rewardDiscount = 0.0;
 
         private final Color BACKGROUND_COLOR = new Color(40, 40, 40);
         private final Color DARKER_BG = new Color(30, 30, 30);
@@ -42,6 +48,10 @@ import javax.swing.border.LineBorder;
         private final Color BUTTON_COLOR = new Color(235, 94, 40);
         private final Color SUCCESS_COLOR = new Color(76, 175, 80);
         private final Color HOVER_COLOR = new Color(245, 124, 70);  // Lighter orange for hover effects
+        private static final Color COMBO_BOX_BG = new Color(50, 50, 50);
+        private static final Color COMBO_BOX_SELECTION = new Color(70, 70, 70);
+        private static final Color COMBO_BOX_BORDER = new Color(80, 80, 80);
+
 
          public CartManager(User user) {
             this.currentUser = user;
@@ -91,6 +101,7 @@ import javax.swing.border.LineBorder;
             this.cardPanel = cardPanel;
         }
 
+        
         public JPanel createCartPanel(JPanel cardPanel, CardLayout cardLayout) {
             this.cardPanel = cardPanel;
             this.cardLayout = cardLayout; 
@@ -117,7 +128,11 @@ import javax.swing.border.LineBorder;
             JPanel itemsPanel = new JPanel();
             itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS));
             itemsPanel.setBackground(BACKGROUND_COLOR);
+            itemsPanel.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 20)); // Add left/right padding
+            
+             itemsPanel.add(Box.createRigidArea(new Dimension(0, 0)));
 
+             
             if (cartItems.isEmpty()) {
                 JPanel emptyPanel = new JPanel(new BorderLayout());
                 emptyPanel.setBackground(DARKER_BG);
@@ -130,9 +145,11 @@ import javax.swing.border.LineBorder;
                 itemsPanel.add(emptyPanel);
             } else {
                 // Select All Panel
-                JPanel selectAllPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+                JPanel selectAllPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); // Changed to 0,0 for tighter layout
                 selectAllPanel.setBackground(DARKER_BG);
                 selectAllPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+                selectAllPanel.setPreferredSize(new Dimension(500, 40)); // Fixed height
+                selectAllPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 40)); // Fixed height but allow width to expand
 
                 JCheckBox selectAll = new JCheckBox("SELECT ALL");
                 selectAll.setFont(new Font("Segoe UI", Font.BOLD, 14));
@@ -177,7 +194,7 @@ import javax.swing.border.LineBorder;
             // Subtotal Panel - Create new labels here that reference the instance variables
             JPanel subtotalPanel = new JPanel(new BorderLayout());
             subtotalPanel.setBackground(DARKER_BG);
-            subtotalPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
+            subtotalPanel.setBorder(null);
 
             // Create new labels that will mirror the instance variables
             JLabel currentSubtotalLabel = new JLabel(subtotalLabel.getText());
@@ -217,6 +234,58 @@ import javax.swing.border.LineBorder;
             applyBtn.setFocusPainted(false);
             applyBtn.setPreferredSize(new Dimension(60, 22));
 
+            applyBtn.addActionListener(e -> {
+                String voucherCode = voucherField.getText().trim();
+                if (!voucherCode.isEmpty()) {
+                    try {
+                        // Check if this is a valid reward code
+                        Reward redemption = getRewardRedemption(voucherCode, currentUser.getUserId());
+                        if (redemption != null) {
+                            // Apply the discount based on reward type
+                            if (redemption.getName().contains("50%")) {
+                                double subtotal = getCartTotal();
+                                rewardDiscount = subtotal * 0.5;
+                                rewardDiscountLabel.setText("Reward Discount: -₱" + String.format("%.2f", rewardDiscount));
+                                rewardDiscountLabel.setVisible(true);
+                                updateSummary();
+                                JOptionPane.showMessageDialog(checkoutPanel,
+                                    "50% discount applied successfully!",
+                                    "Reward Applied",
+                                    JOptionPane.INFORMATION_MESSAGE);
+                            } else if (redemption.getName().contains("Free")) {
+                                // Handle free item rewards if needed
+                                // You might need additional logic here
+                            } else {
+                                // Default fixed discount
+                                rewardDiscount = redemption.getDiscountAmount();
+                                rewardDiscountLabel.setText("Reward Discount: -₱" + String.format("%.2f", rewardDiscount));
+                                rewardDiscountLabel.setVisible(true);
+                                updateSummary();
+                                JOptionPane.showMessageDialog(checkoutPanel,
+                                    "Reward applied successfully!",
+                                    "Reward Applied",
+                                    JOptionPane.INFORMATION_MESSAGE);
+                            }
+                        } else {
+                            JOptionPane.showMessageDialog(checkoutPanel,
+                                "Invalid or expired voucher code",
+                                "Invalid Code",
+                                JOptionPane.WARNING_MESSAGE);
+                        }
+                    } catch (SQLException ex) {
+                        JOptionPane.showMessageDialog(checkoutPanel,
+                            "Error validating voucher: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(checkoutPanel,
+                        "Please enter a voucher code",
+                        "No Code Entered",
+                        JOptionPane.WARNING_MESSAGE);
+                }
+            });
+            
             JPanel voucherInputPanel = new JPanel(new BorderLayout(5, 0));
             voucherInputPanel.setBackground(DARKER_BG);
             voucherInputPanel.add(voucherField, BorderLayout.CENTER);
@@ -349,12 +418,33 @@ import javax.swing.border.LineBorder;
         }
 
     private JPanel createCartItemPanel(CartItem cartItem, JPanel parentPanel) {
+        // Main panel with BorderLayout
         JPanel itemPanel = new JPanel(new BorderLayout(10, 0));
         itemPanel.setBackground(DARKER_BG);
         itemPanel.setBorder(BorderFactory.createCompoundBorder(
             new LineBorder(BORDER_COLOR, 1),
             BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
+
+        // Create a wrapper panel that will contain both indicator and content
+        JPanel contentWrapper = new JPanel(new BorderLayout());
+        contentWrapper.setBackground(DARKER_BG);
+
+        // Indicator panel (left border)
+        JPanel indicatorPanel = new JPanel();
+        indicatorPanel.setPreferredSize(new Dimension(6, 0));
+        indicatorPanel.setBackground(cartItem.isSelected() ? ACCENT_COLOR : new Color(0,0,0,0));
+        contentWrapper.add(indicatorPanel, BorderLayout.WEST);
+
+        // Content panel (right of indicator)
+        JPanel contentPanel = new JPanel(new BorderLayout(10, 0));
+        contentPanel.setBackground(DARKER_BG);
+
+        // Set fixed size for consistency
+        Dimension cardSize = new Dimension(500, 120);
+        contentPanel.setPreferredSize(cardSize);
+        contentPanel.setMinimumSize(cardSize);
+        contentPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, cardSize.height));
 
         JPanel leftPanel = new JPanel(new BorderLayout(15, 0));
         leftPanel.setBackground(DARKER_BG);
@@ -367,8 +457,8 @@ import javax.swing.border.LineBorder;
             System.out.println("Toggling selection for " + cartItem.getItem().getName() + 
                               " to " + newState);
             cartItem.setSelected(newState);
+            indicatorPanel.setBackground(newState ? ACCENT_COLOR : new Color(0,0,0,0));
             updateCartDisplay(parentPanel);
-            // Make sure this updates everything
             updateSummary();
         });
 
@@ -433,7 +523,6 @@ import javax.swing.border.LineBorder;
                 updateCartItemQuantity(cartItem.getItem().getProductId(), newQuantity);
                 updateSummary();
             } else {
-                // Optionally remove item if quantity reaches 0
                 removeCartItem(cartItem.getItem().getProductId());
                 cartItems.remove(cartItem);
                 updateCartDisplay(parentPanel);
@@ -465,7 +554,6 @@ import javax.swing.border.LineBorder;
             removeCartItem(cartItem.getItem().getProductId());
             cartItems.remove(cartItem);
             updateCartDisplay(parentPanel);
-            // Make sure this updates everything
             updateSummary();
         });
 
@@ -477,14 +565,23 @@ import javax.swing.border.LineBorder;
         rightPanel.add(priceLabel, BorderLayout.NORTH);
         rightPanel.add(buttonPanel, BorderLayout.CENTER);
 
-        itemPanel.add(leftPanel, BorderLayout.CENTER);
-        itemPanel.add(rightPanel, BorderLayout.EAST);
+        contentPanel.add(leftPanel, BorderLayout.CENTER);
+        contentPanel.add(rightPanel, BorderLayout.EAST);
+
+        // Add content panel to wrapper
+        contentWrapper.add(contentPanel, BorderLayout.CENTER);
+
+        // Add wrapper to main panel
+        itemPanel.add(contentWrapper, BorderLayout.CENTER);
 
         return itemPanel;
     }
 
         private void updateCartDisplay(JPanel itemsPanel) {
             itemsPanel.removeAll();
+            // Set the layout manager explicitly (important!)
+            itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS));
+            itemsPanel.setBackground(DARKER_BG);
 
             if (cartItems.isEmpty()) {
                 JPanel emptyPanel = new JPanel(new BorderLayout());
@@ -497,9 +594,10 @@ import javax.swing.border.LineBorder;
                 emptyPanel.add(emptyLabel, BorderLayout.CENTER);
                 itemsPanel.add(emptyPanel);
             } else {
-                JPanel selectAllPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+                JPanel selectAllPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
                 selectAllPanel.setBackground(DARKER_BG);
                 selectAllPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+                selectAllPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
                 JCheckBox selectAll = new JCheckBox("SELECT ALL");
                 selectAll.setFont(new Font("Segoe UI", Font.BOLD, 14));
@@ -521,8 +619,11 @@ import javax.swing.border.LineBorder;
                 itemsPanel.add(Box.createVerticalStrut(10));
 
                 for (CartItem item : cartItems) {
-                    itemsPanel.add(createCartItemPanel(item, itemsPanel));
-                    itemsPanel.add(Box.createVerticalStrut(10));
+                    JPanel itemPanel = createCartItemPanel(item, itemsPanel);
+                    itemPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    itemsPanel.add(itemPanel);
+                    // Use rigid area instead of strut for more consistent spacing
+                    itemsPanel.add(Box.createRigidArea(new Dimension(0, 5)));
                 }
             }
 
@@ -564,7 +665,7 @@ import javax.swing.border.LineBorder;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(10, 10, 10, 10);
 
-        // Delivery Method Panel (unchanged)
+        // Delivery Method Panel
         JPanel deliveryMethodPanel = new JPanel();
         deliveryMethodPanel.setLayout(new BoxLayout(deliveryMethodPanel, BoxLayout.Y_AXIS));
         deliveryMethodPanel.setBackground(DARKER_BG);
@@ -580,7 +681,6 @@ import javax.swing.border.LineBorder;
         deliveryMethodPanel.add(Box.createVerticalStrut(15));
 
         ButtonGroup deliveryGroup = new ButtonGroup();
-
         JRadioButton deliveryBtn = createStyledRadioButton("Delivery (₱60.00)", true);
         JRadioButton pickupBtn = createStyledRadioButton("Pickup (Free)", false);
 
@@ -607,7 +707,7 @@ import javax.swing.border.LineBorder;
         gbc.weightx = 1.0;
         contentPanel.add(deliveryMethodPanel, gbc);
 
-        // Shipping Address Panel (updated)
+        // Shipping Address Panel
         JPanel addressPanel = new JPanel();
         addressPanel.setLayout(new BoxLayout(addressPanel, BoxLayout.Y_AXIS));
         addressPanel.setBackground(DARKER_BG);
@@ -622,20 +722,65 @@ import javax.swing.border.LineBorder;
         addressPanel.add(addressTitle);
         addressPanel.add(Box.createVerticalStrut(10));
 
-        // Address Combo Box
+        // Address ComboBox
         JComboBox<String> addressCombo = new JComboBox<>();
         addressCombo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        addressCombo.setBackground(new Color(50, 50, 50));
+        addressCombo.setBackground(COMBO_BOX_BG);
         addressCombo.setForeground(TEXT_COLOR);
         addressCombo.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
-        addressCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, addressCombo.getPreferredSize().height));
 
-        // Load current address
-        addressCombo.addItem(currentUser.getAddress());
+        // Custom renderer
+        addressCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, 
+                    int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                setBackground(isSelected ? COMBO_BOX_SELECTION : COMBO_BOX_BG);
+                setForeground(TEXT_COLOR);
+                return this;
+            }
+        });
+
+        // Editor component styling
+        JTextField editor = (JTextField) addressCombo.getEditor().getEditorComponent();
+        editor.setBackground(COMBO_BOX_BG);
+        editor.setForeground(TEXT_COLOR);
+        editor.setCaretColor(TEXT_COLOR);
+        editor.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
+
+        // ComboBox UI styling
+        addressCombo.setUI(new BasicComboBoxUI() {
+            @Override
+            protected JButton createArrowButton() {
+                JButton button = new JButton();
+                button.setIcon(new ImageIcon(createColoredArrowIcon()));
+                button.setBackground(COMBO_BOX_BG);
+                button.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
+                button.setContentAreaFilled(false);
+                button.setFocusPainted(false);
+                return button;
+            }
+
+            @Override
+            public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
+                g.setColor(COMBO_BOX_BG);
+                g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+            }
+        });
+
+        // Add addresses to combo box
+        List<String> addresses = getUserAddresses(currentUser.getUserId());
+        for (String addr : addresses) {
+            addressCombo.addItem(addr);
+        }
+
+        if (currentUser.getAddress() != null && !currentUser.getAddress().isEmpty()) {
+            addressCombo.setSelectedItem(currentUser.getAddress());
+        }
+
         addressPanel.add(addressCombo);
         addressPanel.add(Box.createVerticalStrut(10));
 
-        // Add Address Button
         JButton addAddressBtn = new JButton("Add Shipping Address");
         addAddressBtn.setContentAreaFilled(false);
         addAddressBtn.setBorderPainted(false);
@@ -652,8 +797,8 @@ import javax.swing.border.LineBorder;
         gbc.gridwidth = 1;
         gbc.weightx = 0.5;
         contentPanel.add(addressPanel, gbc);
-
-        // Order Summary Panel (unchanged)
+        
+        // Order Summary Panel
         JPanel summaryPanel = new JPanel();
         summaryPanel.setLayout(new BoxLayout(summaryPanel, BoxLayout.Y_AXIS));
         summaryPanel.setBackground(DARKER_BG);
@@ -661,10 +806,10 @@ import javax.swing.border.LineBorder;
             BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR),
             BorderFactory.createEmptyBorder(8, 15, 8, 15)
         ));
-        
-        JPanel priceDetailsPanel = new JPanel(new GridLayout(2, 1, 0, 2)); // 2 rows, 1 column with 2px gap
+
+        JPanel priceDetailsPanel = new JPanel(new GridLayout(2, 1, 0, 2));
         priceDetailsPanel.setBackground(DARKER_BG);
-        
+
         JLabel summaryTitle = new JLabel("Order Summary");
         summaryTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         summaryTitle.setForeground(TEXT_COLOR);
@@ -703,74 +848,90 @@ import javax.swing.border.LineBorder;
             }
         }
 
+        
         summaryPanel.add(Box.createVerticalStrut(10));
-        
-        
+
         JSeparator totalsSeparator = new JSeparator();
         totalsSeparator.setForeground(BORDER_COLOR);
         totalsSeparator.setBackground(BORDER_COLOR);
         summaryPanel.add(totalsSeparator);
         summaryPanel.add(Box.createVerticalStrut(10));
 
-        JPanel subtotalPanel = new JPanel(new BorderLayout());
-        // Update the instance labels first
+        // Initialize labels if null
+        if (subtotalLabel == null) {
+            subtotalLabel = new JLabel("Subtotal (0 items)");
+            subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            subtotalLabel.setForeground(SECONDARY_TEXT);
+            subtotalLabel.setOpaque(false);
+        }
+
+        if (subtotalValue == null) {
+            subtotalValue = new JLabel("₱0.00");
+            subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            subtotalValue.setForeground(TEXT_COLOR);
+            subtotalValue.setOpaque(false);
+        }
+
+        if (shippingValue == null) {
+            shippingValue = new JLabel("₱60.00");
+            shippingValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            shippingValue.setForeground(TEXT_COLOR);
+            shippingValue.setOpaque(false);
+        }
+
+        if (totalValue == null) {
+            totalValue = new JLabel("₱0.00");
+            totalValue.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            totalValue.setForeground(ACCENT_COLOR);
+            totalValue.setOpaque(false);
+        }
+
+        // Update labels with current values
         subtotalLabel.setText("Subtotal (" + getSelectedItemCount() + " items)");
         subtotalValue.setText("₱" + String.format("%.2f", getCartTotal()));
+        shippingValue.setText("₱60.00");
+        totalValue.setText("₱" + String.format("%.2f", getCartTotal() + 60.00));
 
-        // Create checkout labels that mirror the instance labels
-        JLabel checkoutSubtotalLabel = new JLabel("Subtotal (" + getSelectedItemCount() + " items)");
-        checkoutSubtotalLabel.setFont(subtotalLabel.getFont());
-        checkoutSubtotalLabel.setForeground(subtotalLabel.getForeground());
-        this.checkoutSubtotalValue = new JLabel("₱" + String.format("%.2f", getCartTotal())); // Just the subtotal without shipping
-        checkoutSubtotalValue.setFont(subtotalValue.getFont());
-        checkoutSubtotalValue.setForeground(subtotalValue.getForeground());
-        
-        subtotalPanel.add(checkoutSubtotalLabel, BorderLayout.WEST);
-        subtotalPanel.add(checkoutSubtotalValue, BorderLayout.EAST);
+        // Subtotal Panel
+        JPanel subtotalPanel = new JPanel(new BorderLayout());
+        subtotalPanel.setBackground(DARKER_BG);
+        subtotalPanel.setBorder(null);
+        subtotalPanel.add(subtotalLabel, BorderLayout.WEST);
+        subtotalPanel.add(subtotalValue, BorderLayout.EAST);
 
-        
-        summaryPanel.add(subtotalPanel);
-
+        // Shipping Panel
         JPanel shippingPanel = new JPanel(new BorderLayout());
         shippingPanel.setBackground(DARKER_BG);
         JLabel shippingLabel = new JLabel("Shipping Fee");
         shippingLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         shippingLabel.setForeground(SECONDARY_TEXT);
-        shippingValue = new JLabel("₱60.00"); // Default to delivery
-        shippingValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        shippingValue.setForeground(TEXT_COLOR);
+        shippingLabel.setOpaque(false);
         shippingPanel.add(shippingLabel, BorderLayout.WEST);
         shippingPanel.add(shippingValue, BorderLayout.EAST);
-        summaryPanel.add(shippingPanel);
-        
+
         priceDetailsPanel.add(subtotalPanel);
         priceDetailsPanel.add(shippingPanel);
         summaryPanel.add(priceDetailsPanel);
 
+        // Total Panel
         JPanel totalPanel = new JPanel(new BorderLayout());
         totalPanel.setBackground(DARKER_BG);
         totalPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
         JLabel totalLabel = new JLabel("Total");
         totalLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
         totalLabel.setForeground(TEXT_COLOR);
-     
-        totalValue.setFont(new Font("Segoe UI", Font.BOLD, 16));
-        totalValue.setForeground(ACCENT_COLOR);
-        
-        this.checkoutTotalValue = new JLabel("₱" + String.format("%.2f", getCartTotal() + 60.00)); // Include shipping by default
-        checkoutTotalValue.setFont(totalValue.getFont());
-        checkoutTotalValue.setForeground(totalValue.getForeground());
         totalPanel.add(totalLabel, BorderLayout.WEST);
-        totalPanel.add(checkoutTotalValue, BorderLayout.EAST);
-        
+        totalPanel.add(totalValue, BorderLayout.EAST);
+
         summaryPanel.add(totalPanel);
-        
+
         gbc.gridx = 1;
         gbc.gridy = 1;
         gbc.gridwidth = 1;
         gbc.weightx = 0.5;
         contentPanel.add(summaryPanel, gbc);
 
+        // Payment Method Panel
         JPanel paymentPanel = new JPanel();
         paymentPanel.setLayout(new BoxLayout(paymentPanel, BoxLayout.Y_AXIS));
         paymentPanel.setBackground(DARKER_BG);
@@ -779,44 +940,47 @@ import javax.swing.border.LineBorder;
             BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
 
-        JLabel paymentTitle = new JLabel("Payment Method");
+        JLabel paymentTitle = new JLabel("Payment Method", SwingConstants.CENTER);
         paymentTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         paymentTitle.setForeground(TEXT_COLOR);
+        paymentTitle.setAlignmentX(Component.CENTER_ALIGNMENT); // Add this line
         paymentPanel.add(paymentTitle);
+
         paymentPanel.add(Box.createVerticalStrut(15));
 
         ButtonGroup paymentGroup = new ButtonGroup();
-        
+
         JRadioButton codBtn = createStyledRadioButton("Cash on Delivery", true);
         JRadioButton cardBtn = createStyledRadioButton("Credit/Debit Card", false);
         JRadioButton walletBtn = createStyledRadioButton("E-Wallet", false);
-        
+
         paymentGroup.add(codBtn);
         paymentGroup.add(cardBtn);
         paymentGroup.add(walletBtn);
-        
+
         JPanel codBtnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         codBtnPanel.setBackground(DARKER_BG);
         codBtnPanel.add(codBtn);
-        
+
         JPanel cardBtnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         cardBtnPanel.setBackground(DARKER_BG);
         cardBtnPanel.add(cardBtn);
-        
+
         JPanel walletBtnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         walletBtnPanel.setBackground(DARKER_BG);
         walletBtnPanel.add(walletBtn);
-        
+
         paymentPanel.add(codBtnPanel);
         paymentPanel.add(cardBtnPanel);
         paymentPanel.add(walletBtnPanel);
-        
+
         gbc.gridx = 0;
         gbc.gridy = 2;
         gbc.gridwidth = 2;
         gbc.weightx = 1.0;
         contentPanel.add(paymentPanel, gbc);
 
+        // Card Details Panel (unchanged)
         JPanel cardDetailsPanel = new JPanel();
         cardDetailsPanel.setLayout(new BoxLayout(cardDetailsPanel, BoxLayout.Y_AXIS));
         cardDetailsPanel.setBackground(DARKER_BG);
@@ -825,6 +989,7 @@ import javax.swing.border.LineBorder;
             BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
         cardDetailsPanel.setVisible(false);
+
         cardDetailsPanel.setFocusable(true);
 
         JLabel cardDetailsTitle = new JLabel("Card Details");
@@ -921,9 +1086,10 @@ import javax.swing.border.LineBorder;
         walletDetailsPanel.setVisible(false);
         walletDetailsPanel.setFocusable(true);
          
-        JLabel walletDetailsTitle = new JLabel("E-Wallet Details");
+        JLabel walletDetailsTitle = new JLabel("E-Wallet Details", SwingConstants.CENTER);
         walletDetailsTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         walletDetailsTitle.setForeground(TEXT_COLOR);
+        walletDetailsTitle.setAlignmentX(Component.CENTER_ALIGNMENT); // Add this line
         walletDetailsPanel.add(walletDetailsTitle);
         walletDetailsPanel.add(Box.createVerticalStrut(15));
 
@@ -966,7 +1132,6 @@ import javax.swing.border.LineBorder;
             walletDetailsPanel.setVisible(false);
             contentPanel.revalidate();
             contentPanel.repaint();
-            // Scroll to card details after the panel is visible
             SwingUtilities.invokeLater(() -> scrollToComponent(cardDetailsPanel));
         });
 
@@ -975,7 +1140,6 @@ import javax.swing.border.LineBorder;
             walletDetailsPanel.setVisible(true);
             contentPanel.revalidate();
             contentPanel.repaint();
-            // Scroll to wallet details after the panel is visible
             SwingUtilities.invokeLater(() -> scrollToComponent(walletDetailsPanel));
         });
 
@@ -1074,6 +1238,56 @@ import javax.swing.border.LineBorder;
         return checkoutPanel;
     }
     
+    private Image createColoredArrowIcon() {
+        BufferedImage image = new BufferedImage(10, 5, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = image.createGraphics();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setColor(TEXT_COLOR);
+        g2.fillPolygon(new int[] {0, 5, 10}, new int[] {0, 5, 0}, 3);
+        g2.dispose();
+        return image;
+    }
+    
+    
+    private List<String> getUserAddresses(int userId) {
+        List<String> addresses = new ArrayList<>();
+
+        try (Connection conn = DBConnection.getConnection()) {
+            // 1. Get primary address from users table
+            String primaryQuery = "SELECT address FROM users WHERE user_id = ?";
+            try (PreparedStatement primaryPS = conn.prepareStatement(primaryQuery)) {
+                primaryPS.setInt(1, userId);
+                ResultSet primaryRS = primaryPS.executeQuery();
+                if (primaryRS.next()) {
+                    String primaryAddress = primaryRS.getString("address");
+                    if (primaryAddress != null && !primaryAddress.trim().isEmpty()) {
+                        addresses.add(primaryAddress);
+                    }
+                }
+            }
+
+            String additionalQuery = "SELECT address FROM user_addresses WHERE user_id = ? AND address NOT IN " +
+                                   "(SELECT address FROM users WHERE user_id = ?) " +
+                                   "ORDER BY is_default DESC, address_id";
+            try (PreparedStatement additionalPS = conn.prepareStatement(additionalQuery)) {
+                additionalPS.setInt(1, userId);
+                additionalPS.setInt(2, userId);
+                ResultSet additionalRS = additionalPS.executeQuery();
+                while (additionalRS.next()) {
+                    addresses.add(additionalRS.getString("address"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(null,
+                "Error loading addresses: " + e.getMessage(),
+                "Database Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+
+        return addresses;
+    }
+    
     private void showAddAddressDialog(JComboBox<String> addressCombo) {
         // Create a custom panel for the dialog
         JPanel panel = new JPanel(new BorderLayout(10, 10));
@@ -1153,35 +1367,62 @@ import javax.swing.border.LineBorder;
     }
     
     private void saveAddressToDatabase(String address) {
+        if (address == null || address.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(checkoutPanel,
+                "Address cannot be empty",
+                "Validation Error",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
         try (Connection conn = DBConnection.getConnection()) {
-            // First check if this is the user's first address (other than default)
-            String checkQuery = "SELECT COUNT(*) AS count FROM user_addresses WHERE user_id = ?";
-            PreparedStatement checkPS = conn.prepareStatement(checkQuery);
-            checkPS.setInt(1, currentUser.getUserId());
-            ResultSet rs = checkPS.executeQuery();
-
-            boolean isFirstAddress = false;
-            if (rs.next()) {
-                isFirstAddress = rs.getInt("count") == 0;
+            // Check if address already exists for this user
+            String checkQuery = "SELECT COUNT(*) FROM user_addresses WHERE user_id = ? AND address = ?";
+            try (PreparedStatement checkPS = conn.prepareStatement(checkQuery)) {
+                checkPS.setInt(1, currentUser.getUserId());
+                checkPS.setString(2, address);
+                ResultSet rs = checkPS.executeQuery();
+                if (rs.next() && rs.getInt(1) > 0) {
+                    JOptionPane.showMessageDialog(checkoutPanel,
+                        "This address is already saved",
+                        "Duplicate Address",
+                        JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
             }
 
-            // Insert into addresses table
+            // Insert new address
             String insert = "INSERT INTO user_addresses (user_id, address, is_default) VALUES (?, ?, ?)";
-            PreparedStatement ps = conn.prepareStatement(insert);
-            ps.setInt(1, currentUser.getUserId());
-            ps.setString(2, address);
-            ps.setInt(3, isFirstAddress ? 1 : 0); // Set as default if first address
-            ps.executeUpdate();
-
-            // If this is the first address, update the users table too
-            if (isFirstAddress) {
-                String updateUser = "UPDATE users SET address = ? WHERE user_id = ?";
-                PreparedStatement updatePS = conn.prepareStatement(updateUser);
-                updatePS.setString(1, address);
-                updatePS.setInt(2, currentUser.getUserId());
-                updatePS.executeUpdate();
-                currentUser.setAddress(address);
+            try (PreparedStatement ps = conn.prepareStatement(insert)) {
+                ps.setInt(1, currentUser.getUserId());
+                ps.setString(2, address);
+                // Set as non-default (0) by default - primary address remains default
+                ps.setInt(3, 0);
+                ps.executeUpdate();
             }
+
+            // Refresh the address combo box
+            SwingUtilities.invokeLater(() -> {
+                Component[] components = checkoutPanel.getComponents();
+                for (Component comp : components) {
+                    if (comp instanceof JScrollPane) {
+                        JScrollPane scrollPane = (JScrollPane) comp;
+                        Component view = scrollPane.getViewport().getView();
+                        if (view instanceof JPanel) {
+                            JPanel contentPanel = (JPanel) view;
+                            for (Component innerComp : contentPanel.getComponents()) {
+                                if (innerComp instanceof JComboBox) {
+                                    @SuppressWarnings("unchecked")
+                                    JComboBox<String> combo = (JComboBox<String>) innerComp;
+                                    combo.addItem(address);
+                                    combo.setSelectedItem(address);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -1193,22 +1434,35 @@ import javax.swing.border.LineBorder;
     }
 
     private void updateCheckoutTotals(boolean isDelivery) {
-        double subtotal = getCartTotal(); // This already calculates only selected items
+        double subtotal = getCartTotal();
         double shipping = isDelivery ? 60.00 : 0.00;
-        double total = subtotal + shipping;
+        double total = subtotal + shipping - rewardDiscount;
 
-        if (checkoutSubtotalValue != null) {
-            checkoutSubtotalValue.setText("₱" + String.format("%.2f", subtotal));
-            subtotalValue.setText("₱" + String.format("%.2f", subtotal)); // Also update the main subtotal
-        }
-        if (shippingValue != null) {
-            shippingValue.setText(isDelivery ? "₱60.00" : "₱0.00");
-        }
-        if (checkoutTotalValue != null) {
-            checkoutTotalValue.setText("₱" + String.format("%.2f", total));
-            totalValue.setText("₱" + String.format("%.2f", total)); // Also update the main total
-        }
+        // Update all labels
+        SwingUtilities.invokeLater(() -> {
+            if (subtotalLabel != null) {
+                subtotalLabel.setText("Subtotal (" + getSelectedItemCount() + " items)");
+            }
+            if (subtotalValue != null) {
+                subtotalValue.setText("₱" + String.format("%.2f", subtotal));
+            }
+            if (shippingValue != null) {
+                shippingValue.setText(isDelivery ? "₱60.00" : "₱0.00");
+            }
+            if (totalValue != null) {
+                totalValue.setText("₱" + String.format("%.2f", total));
+            }
+            if (checkoutTotalValue != null) {
+                checkoutTotalValue.setText("₱" + String.format("%.2f", total));
+            }
+
+            // Update reward points display
+            if (rewardPointsLabel != null) {
+                rewardPointsLabel.setText("Reward Points: " + getUserRewardPoints(currentUser.getUserId()));
+            }
+        });
     }
+    
     
     private JRadioButton createStyledRadioButton(String text, boolean selected) {
         JRadioButton radioButton = new JRadioButton(text);
@@ -1338,35 +1592,42 @@ import javax.swing.border.LineBorder;
     }    
     
     private void processOrder(User user) throws SQLException {
-    if (getSelectedItemCount() == 0) {
-        throw new IllegalStateException("No items selected for order");
-    }
+        if (getSelectedItemCount() == 0) {
+            throw new IllegalStateException("No items selected for order");
+        }
 
-    try (Connection conn = DBConnection.getConnection()) {
-        conn.setAutoCommit(false);
+        try (Connection conn = DBConnection.getConnection()) {
+            conn.setAutoCommit(false);
 
-        // 1. Create the order record
-        String orderQuery = "INSERT INTO orders (user_id, order_date, status, " +
-                          "delivery_method, delivery_address, payment_method, " +
-                          "subtotal, shipping_fee, total_amount) " +
-                          "VALUES (?, NOW(), 'PENDING', ?, ?, ?, ?, ?, ?)";
+            // Calculate order totals
+            double subtotal = getCartTotal();
+            double shipping = 60.00; // Default shipping fee
+            double total = subtotal + shipping - rewardDiscount;
 
-        PreparedStatement orderPS = conn.prepareStatement(orderQuery, PreparedStatement.RETURN_GENERATED_KEYS);
-    
-        orderPS.setInt(1, user.getUserId());
-        orderPS.setString(2, "DELIVERY");
-        orderPS.setString(3, user.getAddress());
-        orderPS.setString(4, "COD");
+            // 1. Create the order record (updated to include reward points)
+            String orderQuery = "INSERT INTO orders (user_id, order_date, status, " +
+                              "delivery_method, delivery_address, payment_method, " +
+                              "subtotal, shipping_fee, reward_discount, total_amount, " +
+                              "points_earned) VALUES (?, NOW(), 'PENDING', ?, ?, ?, " +
+                              "?, ?, ?, ?, ?)";
 
-        double subtotal = getCartTotal();
-        double shipping = 60.00;
-        double total = subtotal + shipping;
+            PreparedStatement orderPS = conn.prepareStatement(orderQuery, 
+                PreparedStatement.RETURN_GENERATED_KEYS);
 
-        orderPS.setDouble(5, subtotal);
-        orderPS.setDouble(6, shipping);
-        orderPS.setDouble(7, total);
+            orderPS.setInt(1, user.getUserId());
+            orderPS.setString(2, "DELIVERY");
+            orderPS.setString(3, user.getAddress());
+            orderPS.setString(4, "COD");
+            orderPS.setDouble(5, subtotal);
+            orderPS.setDouble(6, shipping);
+            orderPS.setDouble(7, rewardDiscount);
+            orderPS.setDouble(8, total);
 
-        orderPS.executeUpdate();
+            // Calculate and set points earned (50 points per ₱500 spent)
+            int pointsEarned = calculateEarnedPoints(subtotal);
+            orderPS.setInt(9, pointsEarned);
+
+            orderPS.executeUpdate();
 
         // Get the generated order ID
         int orderId;
@@ -1415,6 +1676,13 @@ import javax.swing.border.LineBorder;
         // Clear selected items from local cart
         clearSelectedItems();
         
+        if (pointsEarned > 0) {
+            updateUserRewardPoints(user.getUserId(), pointsEarned);
+        }
+        
+        // Reset reward discount after order is processed
+        rewardDiscount = 0.0;
+        
     } catch (SQLException e) {
         try (Connection conn = DBConnection.getConnection()) {
             conn.rollback();
@@ -1450,6 +1718,7 @@ import javax.swing.border.LineBorder;
         updateSummary();
     }
     
+    
     private int getSelectedItemCount() {
         int count = 0;
         for (CartItem item : cartItems) {
@@ -1457,6 +1726,7 @@ import javax.swing.border.LineBorder;
                 count += item.getQuantity();
             }
         }
+        System.out.println("[DEBUG] Selected item count: " + count);
         return count;
     }
 
@@ -1570,83 +1840,80 @@ import javax.swing.border.LineBorder;
                 JOptionPane.ERROR_MESSAGE);
         }
     }
-    
-    /**
- * Loads cart items from database while preserving selection states
- */
-private void loadCartItems() {
-    System.out.println("[DEBUG] Loading cart items...");
-    
-    // Store current selection states before clearing
-    Map<Integer, Boolean> selectionStates = new HashMap<>();
-    for (CartItem item : cartItems) {
-        selectionStates.put(item.getItem().getProductId(), item.isSelected());
-    }
 
-    // Clear current items
-    List<CartItem> oldCartItems = new ArrayList<>(cartItems);
-    cartItems.clear();
+    private void loadCartItems() {
+        System.out.println("[DEBUG] Loading cart items...");
+    
+        // Store current selection states before clearing
+        Map<Integer, Boolean> selectionStates = new HashMap<>();
+        for (CartItem item : cartItems) {
+            selectionStates.put(item.getItem().getProductId(), item.isSelected());
+        }
 
-    try (Connection conn = DBConnection.getConnection()) {
-        // First get the cart ID if we don't have it
-        if (currentCartId == -1) {
-            String cartQuery = "SELECT cart_id FROM carts WHERE user_id = ?";
-            try (PreparedStatement cartPS = conn.prepareStatement(cartQuery)) {
-                cartPS.setInt(1, currentUser.getUserId());
-                ResultSet cartRS = cartPS.executeQuery();
-                if (cartRS.next()) {
-                    currentCartId = cartRS.getInt("cart_id");
-                    System.out.println("[DEBUG] Loaded cart ID: " + currentCartId);
-                } else {
-                    System.out.println("[DEBUG] No cart exists for user");
-                    return; // No cart exists yet
+        // Clear current items
+        List<CartItem> oldCartItems = new ArrayList<>(cartItems);
+        cartItems.clear();
+
+        try (Connection conn = DBConnection.getConnection()) {
+            // First get the cart ID if we don't have it
+            if (currentCartId == -1) {
+                String cartQuery = "SELECT cart_id FROM carts WHERE user_id = ?";
+                try (PreparedStatement cartPS = conn.prepareStatement(cartQuery)) {
+                    cartPS.setInt(1, currentUser.getUserId());
+                    ResultSet cartRS = cartPS.executeQuery();
+                    if (cartRS.next()) {
+                        currentCartId = cartRS.getInt("cart_id");
+                        System.out.println("[DEBUG] Loaded cart ID: " + currentCartId);
+                    } else {
+                        System.out.println("[DEBUG] No cart exists for user");
+                        return; // No cart exists yet
+                    }
                 }
             }
-        }
 
-        // Load all items for this cart
-        String itemsQuery = "SELECT ci.*, p.name, p.description, p.price, p.category " +
-                          "FROM cart_items ci " +
-                          "JOIN products p ON ci.product_id = p.product_id " +
-                          "WHERE ci.cart_id = ?";
-        try (PreparedStatement itemsPS = conn.prepareStatement(itemsQuery)) {
-            itemsPS.setInt(1, currentCartId);
-            ResultSet itemsRS = itemsPS.executeQuery();
+            // Load all items for this cart
+            String itemsQuery = "SELECT ci.*, p.name, p.description, p.price, p.category " +
+                              "FROM cart_items ci " +
+                              "JOIN products p ON ci.product_id = p.product_id " +
+                              "WHERE ci.cart_id = ?";
+            try (PreparedStatement itemsPS = conn.prepareStatement(itemsQuery)) {
+                itemsPS.setInt(1, currentCartId);
+                ResultSet itemsRS = itemsPS.executeQuery();
 
-            while (itemsRS.next()) {
-                MenuItem menuItem = new MenuItem(
-                    itemsRS.getInt("product_id"),
-                    itemsRS.getString("name"),
-                    itemsRS.getDouble("price"),
-                    itemsRS.getString("description")
-                );
+                while (itemsRS.next()) {
+                    MenuItem menuItem = new MenuItem(
+                        itemsRS.getInt("product_id"),
+                        itemsRS.getString("name"),
+                        itemsRS.getDouble("price"),
+                        itemsRS.getString("description")
+                    );
 
-                
-                CartItem item = new CartItem(menuItem);
-                item.setQuantity(itemsRS.getInt("quantity"));
-                // Restore selection state if previously set
-                item.setSelected(selectionStates.getOrDefault(menuItem.getProductId(), false));
-                cartItems.add(item);
-                
-                System.out.println("[DEBUG] Loaded item: " + menuItem.getName() + 
-                                 " (Qty: " + item.getQuantity() + 
-                                 ", Selected: " + item.isSelected() + ")");
+
+                    CartItem item = new CartItem(menuItem);
+                    item.setQuantity(itemsRS.getInt("quantity"));
+                    // Restore selection state if previously set
+                    item.setSelected(selectionStates.getOrDefault(menuItem.getProductId(), false));
+                    cartItems.add(item);
+
+                    System.out.println("[DEBUG] Loaded item: " + menuItem.getName() + 
+                                     " (Qty: " + item.getQuantity() + 
+                                     ", Selected: " + item.isSelected() + ")");
+                }
             }
-        }
-        
-        System.out.println("[DEBUG] Total items loaded: " + cartItems.size());
 
-    } catch (SQLException e) {
-        System.err.println("[ERROR] loadCartItems failed: " + e.getMessage());
-        e.printStackTrace();
-        // Restore old items if loading failed
-        cartItems = oldCartItems;
-        JOptionPane.showMessageDialog(null,
-            "Error loading cart items. Please try again.",
-            "Cart Error",
-            JOptionPane.ERROR_MESSAGE);
+            System.out.println("[DEBUG] Total items loaded: " + cartItems.size());
+
+        } catch (SQLException e) {
+            System.err.println("[ERROR] loadCartItems failed: " + e.getMessage());
+            e.printStackTrace();
+            // Restore old items if loading failed
+            cartItems = oldCartItems;
+            JOptionPane.showMessageDialog(null,
+                "Error loading cart items. Please try again.",
+                "Cart Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
     }
-}
     
     private void updateCartItemQuantity(int productId, int newQuantity) {
         try (Connection conn = DBConnection.getConnection()) {
@@ -1707,4 +1974,74 @@ private void loadCartItems() {
         }
     }
     
+    private int calculateEarnedPoints(double totalAmount) {
+        return (int)(totalAmount / 500) * POINTS_PER_500_PESOS;
+    }
+
+    private void updateUserRewardPoints(int userId, int pointsChange) {
+        try (Connection conn = DBConnection.getConnection()) {
+            // Check if user has a rewards record
+            String checkQuery = "SELECT user_id FROM user_rewards WHERE user_id = ?";
+            try (PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
+                checkStmt.setInt(1, userId);
+                ResultSet rs = checkStmt.executeQuery();
+
+                if (!rs.next()) {
+                    // Create record if doesn't exist
+                    String insertQuery = "INSERT INTO user_rewards (user_id, points_balance) VALUES (?, ?)";
+                    try (PreparedStatement insertStmt = conn.prepareStatement(insertQuery)) {
+                        insertStmt.setInt(1, userId);
+                        insertStmt.setInt(2, Math.max(pointsChange, 0)); // Start with 0 or positive points
+                        insertStmt.executeUpdate();
+                    }
+                    return;
+                }
+            }
+
+            // Update existing record
+            String updateQuery = "UPDATE user_rewards SET points_balance = points_balance + ? WHERE user_id = ?";
+            try (PreparedStatement updateStmt = conn.prepareStatement(updateQuery)) {
+                updateStmt.setInt(1, pointsChange);
+                updateStmt.setInt(2, userId);
+                updateStmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            System.err.println("Error updating reward points: " + e.getMessage());
+        }
+    }
+
+    private int getUserRewardPoints(int userId) {
+        try (Connection conn = DBConnection.getConnection()) {
+            String query = "SELECT points_balance FROM user_rewards WHERE user_id = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                stmt.setInt(1, userId);
+                ResultSet rs = stmt.executeQuery();
+                return rs.next() ? rs.getInt("points_balance") : 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting reward points: " + e.getMessage());
+            return 0;
+        }
+    }
+    
+    private Reward getRewardRedemption(String code, int userId) throws SQLException {
+        try (Connection conn = DBConnection.getConnection()) {
+            String query = "SELECT r.name, r.discount_amount FROM reward_redemptions rr " +
+                          "JOIN rewards r ON rr.reward_id = r.reward_id " +
+                          "WHERE rr.redeemed = 0 AND rr.user_id = ? AND rr.code = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                stmt.setInt(1, userId);
+                stmt.setString(2, code);
+                ResultSet rs = stmt.executeQuery();
+
+                if (rs.next()) {
+                    return new Reward(
+                        rs.getString("name"),
+                        rs.getDouble("discount_amount")
+                    );
+                }
+            }
+        }
+        return null;
+    }
 }

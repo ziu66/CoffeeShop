@@ -47,6 +47,7 @@ public class UserDashboard extends JFrame {
         mainPanel.setBackground(new Color(40, 40, 40));
 
         // Initialize card panel
+        cardPanel = new JPanel(cardLayout);
         cardPanel.setBackground(new Color(40, 40, 40));
 
         // Create content panels
@@ -54,12 +55,14 @@ public class UserDashboard extends JFrame {
         JPanel merchPanel = createMerchandiseContent();
         JPanel rewardsPanel = createRewardsContent();
         JPanel cartPanel = createCartContent();
+        JPanel myOrdersPanel = new MyOrders(currentUser); // Create MyOrders panel
 
-        // Add panels to cardPanel
+        // Add panels to cardPanel with their identifiers
         cardPanel.add(menuPanel, "menu");
         cardPanel.add(merchPanel, "merchandise");
         cardPanel.add(rewardsPanel, "rewards");
         cardPanel.add(cartPanel, "cart");
+        cardPanel.add(myOrdersPanel, "myorders"); // Add MyOrders panel with identifier "myorders"
         cardPanel.add(cartManager.createOrderConfirmationPanel(cardPanel, cardLayout), "orderConfirmation");
         cardPanel.add(cartManager.createCheckoutPanel(cardPanel, cardLayout), "checkout");
 
@@ -69,7 +72,10 @@ public class UserDashboard extends JFrame {
         headerPanel = createHeaderPanel();
         mainPanel.add(headerPanel, BorderLayout.NORTH);
 
-        // Set initial state AFTER everything is initialized
+        JPanel notificationsPanel = new NotificationsPanel(currentUser);
+        cardPanel.add(notificationsPanel, "notifications");
+
+        // Set initial state
         updateActiveButton(0);
         cardLayout.show(cardPanel, "menu");
 
@@ -140,8 +146,8 @@ public class UserDashboard extends JFrame {
             navContent.add(missingLogo);
         }
 
-        // Navigation Buttons with CART
-        String[] navItems = {"MENU", "MERCHANDISE", "REWARDS", "CART"};
+        // Navigation Buttons with CART and MY ORDERS
+        String[] navItems = {"MENU", "MERCHANDISE", "REWARDS", "MY ORDERS", "CART", "NOTIFICATIONS"};
         navButtons = new JButton[navItems.length];
 
         for (int i = 0; i < navItems.length; i++) {
@@ -152,8 +158,8 @@ public class UserDashboard extends JFrame {
             navButtons[i].setFont(new Font("Arial", Font.BOLD, 14));
             navButtons[i].setContentAreaFilled(false);
             navButtons[i].setFocusPainted(false);
-            
-            
+
+            // Set icon for CART button
             if (navItems[i].equals("CART")) {
                 try {
                     URL cartIconUrl = getClass().getResource("/images/cart-icon.png");
@@ -167,7 +173,7 @@ public class UserDashboard extends JFrame {
             }
 
             final int buttonIndex = i;
-    
+
             navButtons[i].addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
                     JButton source = (JButton)evt.getSource();
@@ -185,10 +191,10 @@ public class UserDashboard extends JFrame {
 
             final int index = i;
             navButtons[i].addActionListener(e -> {
-                updateActiveButton(index);
-                String cardName = navItems[index].toLowerCase();
-                cardLayout.show(cardPanel, cardName);
-            });
+            updateActiveButton(index);
+            String cardName = navItems[index].toLowerCase().replace(" ", ""); // This will convert "MY ORDERS" to "myorders"
+            cardLayout.show(cardPanel, cardName);
+        });
 
             navContent.add(navButtons[i]);
         }
@@ -246,7 +252,6 @@ public class UserDashboard extends JFrame {
         for (int i = 0; i < navButtons.length; i++) {
             JButton button = navButtons[i];
             if (i == activeIndex) {
-                // Create compound border with empty side borders
                 button.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createEmptyBorder(0, 15, 5, 15),
                     BorderFactory.createMatteBorder(0, 0, 3, 0, new Color(218, 165, 32))
@@ -425,7 +430,6 @@ public class UserDashboard extends JFrame {
             }
         } catch (Exception e) {
             System.err.println("Could not load image: " + e.getMessage());
-            // Create placeholder with first letter of product name
             imageLabel = createPlaceholderImage(150, 150, item.getName().substring(0, 1).toUpperCase());
         }
 
@@ -670,10 +674,8 @@ public class UserDashboard extends JFrame {
         rewardsGrid.setBackground(new Color(40, 40, 40)); // Dark background
 
         String[][] rewards = {
-            {"Free Regular Coffee", "100"},
-            {"Free Premium Coffee", "200"},
-            {"50% Off Pastry", "75"},
-            {"Free Merchandise Item", "500"}
+            {"50% Off Any Order", "500", "50"},  // Name, points cost, discount percentage
+            {"20% Off Any Order", "100", "20"},
         };
 
         for (String[] reward : rewards) {
@@ -687,7 +689,36 @@ public class UserDashboard extends JFrame {
     }
     
     private int getUserPoints() {
-        return 0; // Temporary fix
+        try {
+            Connection conn = DBConnection.getConnection();
+            String query = "SELECT points_balance FROM user_rewards WHERE user_id = ?";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setInt(1, currentUser.getUserId());
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt("points_balance");
+            } else {
+                // Initialize if user doesn't have a record yet
+                initializeUserRewards(currentUser.getUserId());
+                return 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting user points: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    private void initializeUserRewards(int userId) {
+        try {
+            Connection conn = DBConnection.getConnection();
+            String query = "INSERT INTO user_rewards (user_id, points_balance) VALUES (?, 0)";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setInt(1, userId);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Error initializing user rewards: " + e.getMessage());
+        }
     }
     
     private JPanel createRewardPanel(String rewardName, int pointsCost, int userPoints) {
@@ -737,19 +768,50 @@ public class UserDashboard extends JFrame {
             });
         }
 
-        redeemButton.addActionListener(e -> {
+         redeemButton.addActionListener(e -> {
             int option = JOptionPane.showConfirmDialog(this,
                 "Are you sure you want to redeem " + rewardName + " for " + pointsCost + " points?",
                 "Confirm Redemption",
                 JOptionPane.YES_NO_OPTION);
 
             if (option == JOptionPane.YES_OPTION) {
-                // Process reward redemption
-                JOptionPane.showMessageDialog(this,
-                    "You have successfully redeemed " + rewardName + ".\n" +
-                    "Your reward code: " + generateRewardCode(),
-                    "Redemption Successful",
-                    JOptionPane.INFORMATION_MESSAGE);
+                try {
+                    if (userPoints < pointsCost) {
+                        JOptionPane.showMessageDialog(this,
+                            "You don't have enough points for this reward.",
+                            "Insufficient Points",
+                            JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+
+                    int rewardId = getRewardIdByName(rewardName);
+                    if (rewardId == -1) {
+                        throw new Exception("Reward not found in database");
+                    }
+
+                    // Generate code
+                    String rewardCode = generateRewardCode();
+
+                    // Record the redemption with code
+                    recordRedemption(currentUser.getUserId(), rewardId, rewardCode);
+
+                    // Deduct points
+                    updateUserPoints(currentUser.getUserId(), -pointsCost);
+
+                    JOptionPane.showMessageDialog(this,
+                        "You have successfully redeemed " + rewardName + ".\n" +
+                        "Your reward code: " + rewardCode + "\n" +
+                        "Enter this code in the checkout page to apply your discount.",
+                        "Redemption Successful",
+                        JOptionPane.INFORMATION_MESSAGE);
+
+                    cardLayout.show(cardPanel, "rewards");
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this,
+                        "Error redeeming reward: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
             }
         });
 
@@ -786,8 +848,40 @@ public class UserDashboard extends JFrame {
         return panel;
     }
     
+    private int getRewardIdByName(String rewardName) throws SQLException {
+        Connection conn = DBConnection.getConnection();
+        String query = "SELECT reward_id FROM rewards WHERE name = ?";
+        PreparedStatement stmt = conn.prepareStatement(query);
+        stmt.setString(1, rewardName);
+        ResultSet rs = stmt.executeQuery();
+
+        if (rs.next()) {
+            return rs.getInt("reward_id");
+        }
+        return -1;
+    }
+    
+    private void recordRedemption(int userId, int rewardId, String code) throws SQLException {
+        Connection conn = DBConnection.getConnection();
+        String query = "INSERT INTO reward_redemptions (user_id, reward_id, code) VALUES (?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(query);
+        stmt.setInt(1, userId);
+        stmt.setInt(2, rewardId);
+        stmt.setString(3, code);
+        stmt.executeUpdate();
+    }
+
+    private void updateUserPoints(int userId, int pointsChange) throws SQLException {
+        Connection conn = DBConnection.getConnection();
+        String query = "UPDATE user_rewards SET points_balance = points_balance + ? WHERE user_id = ?";
+        PreparedStatement stmt = conn.prepareStatement(query);
+        stmt.setInt(1, pointsChange);
+        stmt.setInt(2, userId);
+        stmt.executeUpdate();
+    }
+    
+    
     private String generateRewardCode() {
-        // Simple random code generator
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         StringBuilder code = new StringBuilder();
         
@@ -798,6 +892,5 @@ public class UserDashboard extends JFrame {
         
         return code.toString();
     }
-    
     
 }

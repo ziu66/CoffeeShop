@@ -21,4 +21,6 @@ public class DBConnection {
             throw new SQLException("MySQL JDBC Driver not found", ex);
         }
     }
+    
+    
 }

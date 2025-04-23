@@ -59,7 +59,7 @@ public class OrderManagement extends JFrame {
         filterLabel.setForeground(Color.WHITE);
         filterPanel.add(filterLabel);
         
-        filterStatus = new JComboBox<>(new String[]{"All", "PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"});
+        filterStatus = new JComboBox<>(new String[]{"All", "PENDING", "PROCESSING","ON ITS WAY", "DELIVERED", "CANCELLED"});
         filterStatus.setBackground(new Color(60, 60, 60));
         filterStatus.setForeground(Color.WHITE);
         filterStatus.addActionListener(e -> loadOrderData());
@@ -477,41 +477,48 @@ public class OrderManagement extends JFrame {
         if (selectedRow == -1) {
             return;
         }
-        
+
         int orderId = (int) ordersTable.getValueAt(selectedRow, 0);
         String currentStatus = (String) ordersTable.getValueAt(selectedRow, 3);
-        
-        // Create a combo box with status options
-        JComboBox<String> statusCombo = new JComboBox<>(new String[]{"PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"});
-        statusCombo.setSelectedItem(currentStatus);
-        
-        // Show dialog to select new status
+
+        // Fix the status options to match database enum
+        JComboBox<String> statusCombo = new JComboBox<>(new String[]{
+            "PENDING", "PROCESSING", "ON_ITS_WAY", "DELIVERED", "CANCELLED"
+        });
+        statusCombo.setSelectedItem(currentStatus.replace(" ", "_")); // Handle UI vs DB format
+
         int result = JOptionPane.showConfirmDialog(this, 
             new Object[]{"Select new status:", statusCombo}, 
             "Update Order Status", 
             JOptionPane.OK_CANCEL_OPTION, 
             JOptionPane.PLAIN_MESSAGE);
-        
+
         if (result == JOptionPane.OK_OPTION) {
             String newStatus = (String) statusCombo.getSelectedItem();
-            
-            // Update status in database
+
             try (Connection conn = DBConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(
-                     "UPDATE orders SET status = ? WHERE order_id = ?")) {
-                
+                PreparedStatement stmt = conn.prepareStatement(
+                    "UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?")) {
+
                 stmt.setString(1, newStatus);
                 stmt.setInt(2, orderId);
-                
+
                 int updateResult = stmt.executeUpdate();
                 if (updateResult > 0) {
-                    // Update the UI
-                    ordersTable.setValueAt(newStatus, selectedRow, 3);
-                    lblOrderStatus.setText("Status: " + newStatus);
-                    
+                    // Update the UI - convert to display format
+                    String displayStatus = newStatus.replace("_", " ");
+                    ordersTable.setValueAt(displayStatus, selectedRow, 3);
+                    lblOrderStatus.setText("Status: " + displayStatus);
+
+                    // Refresh the notifications panel if it exists
+                    refreshNotificationsPanel();
+
                     JOptionPane.showMessageDialog(this, 
                         "Order status updated successfully", 
                         "Success", JOptionPane.INFORMATION_MESSAGE);
+
+                    // Reload order data to ensure consistency
+                    loadOrderData();
                 }
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -522,6 +529,20 @@ public class OrderManagement extends JFrame {
         }
     }
     
+     private void refreshNotificationsPanel() {
+        Window[] windows = Window.getWindows();
+        for (Window window : windows) {
+            if (window instanceof JFrame) {
+                Component[] components = ((JFrame) window).getContentPane().getComponents();
+                for (Component comp : components) {
+                    if (comp instanceof NotificationsPanel) {
+                        ((NotificationsPanel) comp).loadNotifications();
+                    }
+                }
+            }
+        }
+    }
+     
     private void printOrder() {
         int selectedRow = ordersTable.getSelectedRow();
         if (selectedRow == -1) {
