@@ -748,72 +748,9 @@ public class UserDashboard extends JFrame {
         redeemButton.setFocusPainted(false);
         redeemButton.setEnabled(userPoints >= pointsCost);
 
-        if (!redeemButton.isEnabled()) {
-            redeemButton.setToolTipText("Not enough points");
-            redeemButton.setBackground(new Color(100, 100, 100)); // Disabled state
-            redeemButton.setForeground(new Color(150, 150, 150));
-        } else {
-            // Hover effects (only for enabled buttons)
-            redeemButton.addMouseListener(new java.awt.event.MouseAdapter() {
-                public void mouseEntered(java.awt.event.MouseEvent evt) {
-                    if (redeemButton.isEnabled()) {
-                        redeemButton.setBackground(new Color(255, 215, 0)); // Brighter gold on hover
-                    }
-                }
-                public void mouseExited(java.awt.event.MouseEvent evt) {
-                    if (redeemButton.isEnabled()) {
-                        redeemButton.setBackground(new Color(218, 165, 32)); // Back to normal gold
-                    }
-                }
-            });
-        }
-
-         redeemButton.addActionListener(e -> {
-            int option = JOptionPane.showConfirmDialog(this,
-                "Are you sure you want to redeem " + rewardName + " for " + pointsCost + " points?",
-                "Confirm Redemption",
-                JOptionPane.YES_NO_OPTION);
-
-            if (option == JOptionPane.YES_OPTION) {
-                try {
-                    if (userPoints < pointsCost) {
-                        JOptionPane.showMessageDialog(this,
-                            "You don't have enough points for this reward.",
-                            "Insufficient Points",
-                            JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-
-                    int rewardId = getRewardIdByName(rewardName);
-                    if (rewardId == -1) {
-                        throw new Exception("Reward not found in database");
-                    }
-
-                    // Generate code
-                    String rewardCode = generateRewardCode();
-
-                    // Record the redemption with code
-                    recordRedemption(currentUser.getUserId(), rewardId, rewardCode);
-
-                    // Deduct points
-                    updateUserPoints(currentUser.getUserId(), -pointsCost);
-
-                    JOptionPane.showMessageDialog(this,
-                        "You have successfully redeemed " + rewardName + ".\n" +
-                        "Your reward code: " + rewardCode + "\n" +
-                        "Enter this code in the checkout page to apply your discount.",
-                        "Redemption Successful",
-                        JOptionPane.INFORMATION_MESSAGE);
-
-                    cardLayout.show(cardPanel, "rewards");
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this,
-                        "Error redeeming reward: " + ex.getMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
+        // Check if this reward has already been redeemed by the user
+        boolean isRedeemed = checkIfRewardRedeemed(currentUser.getUserId(), rewardName);
+        String redemptionCode = getRedemptionCode(currentUser.getUserId(), rewardName);
 
         JPanel infoPanel = new JPanel();
         infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
@@ -821,6 +758,88 @@ public class UserDashboard extends JFrame {
         infoPanel.add(nameLabel);
         infoPanel.add(Box.createVerticalStrut(5));
         infoPanel.add(pointsLabel);
+
+        if (isRedeemed) {
+            // If redeemed, show the code and expiration
+            JLabel redeemedLabel = new JLabel("Redeemed! Code: " + redemptionCode);
+            redeemedLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            redeemedLabel.setForeground(new Color(0, 200, 0)); // Green color
+            infoPanel.add(redeemedLabel);
+
+            // Disable the redeem button
+            redeemButton.setEnabled(false);
+            redeemButton.setBackground(new Color(100, 100, 100));
+            redeemButton.setForeground(new Color(150, 150, 150));
+            redeemButton.setText("Already Redeemed");
+        } else {
+            // Original button behavior for non-redeemed rewards
+            if (!redeemButton.isEnabled()) {
+                redeemButton.setToolTipText("Not enough points");
+                redeemButton.setBackground(new Color(100, 100, 100)); // Disabled state
+                redeemButton.setForeground(new Color(150, 150, 150));
+            } else {
+                // Hover effects (only for enabled buttons)
+                redeemButton.addMouseListener(new java.awt.event.MouseAdapter() {
+                    public void mouseEntered(java.awt.event.MouseEvent evt) {
+                        if (redeemButton.isEnabled()) {
+                            redeemButton.setBackground(new Color(255, 215, 0)); // Brighter gold on hover
+                        }
+                    }
+                    public void mouseExited(java.awt.event.MouseEvent evt) {
+                        if (redeemButton.isEnabled()) {
+                            redeemButton.setBackground(new Color(218, 165, 32)); // Back to normal gold
+                        }
+                    }
+                });
+            }
+
+            redeemButton.addActionListener(e -> {
+                int option = JOptionPane.showConfirmDialog(this,
+                    "Are you sure you want to redeem " + rewardName + " for " + pointsCost + " points?",
+                    "Confirm Redemption",
+                    JOptionPane.YES_NO_OPTION);
+
+                if (option == JOptionPane.YES_OPTION) {
+                    try {
+                        if (userPoints < pointsCost) {
+                            JOptionPane.showMessageDialog(this,
+                                "You don't have enough points for this reward.",
+                                "Insufficient Points",
+                                JOptionPane.WARNING_MESSAGE);
+                            return;
+                        }
+
+                        int rewardId = getRewardIdByName(rewardName);
+                        if (rewardId == -1) {
+                            throw new Exception("Reward not found in database");
+                        }
+
+                        // Generate code
+                        String rewardCode = generateRewardCode();
+
+                        // Record the redemption with code
+                        recordRedemption(currentUser.getUserId(), rewardId, rewardCode);
+
+                        // Deduct points
+                        updateUserPoints(currentUser.getUserId(), -pointsCost);
+
+                        JOptionPane.showMessageDialog(this,
+                            "You have successfully redeemed " + rewardName + ".\n" +
+                            "Your reward code: " + rewardCode + "\n" +
+                            "Enter this code in the checkout page to apply your discount.",
+                            "Redemption Successful",
+                            JOptionPane.INFORMATION_MESSAGE);
+
+                        cardLayout.show(cardPanel, "rewards");
+                    } catch (Exception ex) {
+                        JOptionPane.showMessageDialog(this,
+                            "Error redeeming reward: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            });
+        }
 
         panel.add(infoPanel, BorderLayout.CENTER);
         panel.add(redeemButton, BorderLayout.EAST);
@@ -847,6 +866,43 @@ public class UserDashboard extends JFrame {
 
         return panel;
     }
+
+    private boolean checkIfRewardRedeemed(int userId, String rewardName) {
+        try {
+            Connection conn = DBConnection.getConnection();
+            String query = "SELECT rr.* FROM reward_redemptions rr " +
+                          "JOIN rewards r ON rr.reward_id = r.reward_id " +
+                          "WHERE rr.user_id = ? AND r.name = ? AND rr.expires_at > CURRENT_TIMESTAMP";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setInt(1, userId);
+            stmt.setString(2, rewardName);
+            ResultSet rs = stmt.executeQuery();
+            return rs.next(); // Returns true if there's an active redemption
+        } catch (SQLException e) {
+            System.err.println("Error checking reward redemption: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private String getRedemptionCode(int userId, String rewardName) {
+        try {
+            Connection conn = DBConnection.getConnection();
+            String query = "SELECT rr.code FROM reward_redemptions rr " +
+                          "JOIN rewards r ON rr.reward_id = r.reward_id " +
+                          "WHERE rr.user_id = ? AND r.name = ? AND rr.expires_at > CURRENT_TIMESTAMP";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setInt(1, userId);
+            stmt.setString(2, rewardName);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("code");
+            }
+            return null;
+        } catch (SQLException e) {
+            System.err.println("Error getting redemption code: " + e.getMessage());
+            return null;
+        }
+    }
     
     private int getRewardIdByName(String rewardName) throws SQLException {
         Connection conn = DBConnection.getConnection();
@@ -863,12 +919,33 @@ public class UserDashboard extends JFrame {
     
     private void recordRedemption(int userId, int rewardId, String code) throws SQLException {
         Connection conn = DBConnection.getConnection();
-        String query = "INSERT INTO reward_redemptions (user_id, reward_id, code) VALUES (?, ?, ?)";
-        PreparedStatement stmt = conn.prepareStatement(query);
-        stmt.setInt(1, userId);
-        stmt.setInt(2, rewardId);
-        stmt.setString(3, code);
-        stmt.executeUpdate();
+
+        // Calculate expiration date (5 days from now)
+        java.util.Date now = new java.util.Date();
+        java.util.Date expiresAt = new java.util.Date(now.getTime() + (5 * 24 * 60 * 60 * 1000));
+        java.sql.Timestamp expiresAtSql = new java.sql.Timestamp(expiresAt.getTime());
+
+        // First get the points cost and discount amount for this reward
+        String rewardQuery = "SELECT points_cost, discount_amount FROM rewards WHERE reward_id = ?";
+        PreparedStatement rewardStmt = conn.prepareStatement(rewardQuery);
+        rewardStmt.setInt(1, rewardId);
+        ResultSet rs = rewardStmt.executeQuery();
+
+        if (rs.next()) {
+            int pointsUsed = rs.getInt("points_cost");
+            double discountAmount = rs.getDouble("discount_amount");
+
+            // Then insert into redemptions with all required fields
+            String query = "INSERT INTO reward_redemptions (user_id, reward_id, points_used, discount_amount, code, redemption_date, expires_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setInt(1, userId);
+            stmt.setInt(2, rewardId);
+            stmt.setInt(3, pointsUsed);
+            stmt.setDouble(4, discountAmount);
+            stmt.setString(5, code);
+            stmt.setTimestamp(6, expiresAtSql);
+            stmt.executeUpdate();
+        }
     }
 
     private void updateUserPoints(int userId, int pointsChange) throws SQLException {
