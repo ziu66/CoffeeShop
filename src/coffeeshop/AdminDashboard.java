@@ -23,6 +23,12 @@ public class AdminDashboard extends JFrame {
     public AdminDashboard(User user) {
         this.currentUser = user;
         
+        try {
+    UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        
         // Set up the frame
         setTitle("But First, Coffee - Admin Dashboard");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -96,6 +102,8 @@ public class AdminDashboard extends JFrame {
 
         // Logout Button
         btnLogout = new JButton("Logout");
+        btnLogout.setContentAreaFilled(false);
+        btnLogout.setOpaque(true);
         btnLogout.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         btnLogout.setForeground(new Color(200, 200, 200));
         btnLogout.setBackground(new Color(70, 70, 70));
@@ -124,7 +132,7 @@ public class AdminDashboard extends JFrame {
         });
 
         rightPanel.add(btnLogout);
-
+        
         // Add components to navBar
         navBar.add(navContent, BorderLayout.WEST);
         navBar.add(rightPanel, BorderLayout.EAST);
@@ -215,7 +223,7 @@ public class AdminDashboard extends JFrame {
             JLabel iconLabel = new JLabel(new ImageIcon(scaledIcon));
             iconPanel.add(iconLabel);
         } else {
-            JLabel iconPlaceholder = new JLabel("[]");
+            JLabel iconPlaceholder = new JLabel("");
             iconPlaceholder.setFont(new Font("Arial", Font.BOLD, 18));
             iconPlaceholder.setForeground(new Color(218, 165, 32)); // Gold color
             iconPanel.add(iconPlaceholder);

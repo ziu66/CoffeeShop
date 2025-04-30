@@ -12,6 +12,11 @@ import java.awt.event.*;
 import java.sql.*;
 import java.util.*;
 import java.text.DecimalFormat;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import javax.swing.plaf.basic.BasicButtonUI;
 
 public class ProductManagement extends JFrame {
     private JTable productsTable;
@@ -36,6 +41,12 @@ public class ProductManagement extends JFrame {
     
     public ProductManagement(User user) {
         this.currentUser = user;
+        
+        try {
+            UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         
         // Set up the frame
         setTitle("But First, Coffee - Product Management");
@@ -188,6 +199,9 @@ public class ProductManagement extends JFrame {
     }
     
     private void styleButton(JButton button, Color bgColor, Color fgColor) {
+        // Create a custom button UI
+        button.setUI(new BasicButtonUI());
+
         // Set basic properties
         button.setBackground(bgColor);
         button.setForeground(fgColor);
@@ -198,39 +212,13 @@ public class ProductManagement extends JFrame {
         ));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        // Fix for Swing's default button UI - ensure these properties are set
+        // Explicitly set these properties to ensure the button displays correctly
         button.setContentAreaFilled(true);
         button.setBorderPainted(true);
         button.setOpaque(true);
 
-        // Make the button compatible with all Look and Feel settings
-        button.putClientProperty("JButton.buttonType", "square");
-
-        // Add hover effect
-        button.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                button.setBackground(bgColor.brighter());
-            }
-
-            @Override
-            public void mouseExited(MouseEvent e) {
-                button.setBackground(bgColor);
-            }
-
-            // Force repaint on press for consistent colors
-            @Override
-            public void mousePressed(MouseEvent e) {
-                button.setBackground(bgColor.darker());
-                button.repaint();
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                button.setBackground(bgColor);
-                button.repaint();
-            }
-        });
+        // Add this line to ensure the LAF doesn't override your settings
+        button.putClientProperty("JButton.buttonType", null);
     }
     
     private void loadProductData() {
@@ -293,18 +281,12 @@ public class ProductManagement extends JFrame {
     }
     
     private void styleComboBox(JComboBox<?> comboBox) {
-        // Apply consistent styling to the combo box
+        // Apply consistent styling to the combo box without hover effects
         comboBox.setBackground(INPUT_BG);
         comboBox.setForeground(Color.WHITE);
         comboBox.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
         
-        // Set UI manager properties for consistency
-        UIManager.put("ComboBox.background", INPUT_BG);
-        UIManager.put("ComboBox.foreground", Color.WHITE);
-        UIManager.put("ComboBox.selectionBackground", SELECTION_BG);
-        UIManager.put("ComboBox.selectionForeground", Color.WHITE);
-        
-        // Custom renderer for list items
+        // Custom renderer for list items without hover effects
         comboBox.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, 
@@ -322,9 +304,6 @@ public class ProductManagement extends JFrame {
                 return c;
             }
         });
-        
-        // Force update UI
-        SwingUtilities.updateComponentTreeUI(comboBox);
     }
     
     private void setupDialogUI() {
@@ -338,8 +317,11 @@ public class ProductManagement extends JFrame {
         UIManager.put("TextArea.foreground", Color.WHITE);
         UIManager.put("ComboBox.background", INPUT_BG);
         UIManager.put("ComboBox.foreground", Color.WHITE);
-        UIManager.put("Button.background", BTN_DEFAULT);
-        UIManager.put("Button.foreground", Color.WHITE);
+
+        // Add these lines for button styling
+        UIManager.put("Button.select", SELECTION_BG);
+        UIManager.put("Button.focus", new Color(0, 0, 0, 0));
+        UIManager.put("Button.border", BorderFactory.createLineBorder(BORDER_COLOR, 1));
     }
     
     private void addNewProduct() {
@@ -349,22 +331,22 @@ public class ProductManagement extends JFrame {
         dialog.setSize(500, 400);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
-        
+
         JPanel formPanel = new JPanel(new GridBagLayout());
         formPanel.setBackground(TABLE_BG);
         formPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        
+
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(5, 5, 5, 5);
-        
+
         // Name field
         gbc.gridx = 0;
         gbc.gridy = 0;
         JLabel nameLabel = new JLabel("Product Name:");
         nameLabel.setForeground(Color.WHITE);
         formPanel.add(nameLabel, gbc);
-        
+
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         JTextField nameField = new JTextField(20);
@@ -372,7 +354,7 @@ public class ProductManagement extends JFrame {
         nameField.setForeground(Color.WHITE);
         nameField.setCaretColor(Color.WHITE);
         formPanel.add(nameField, gbc);
-        
+
         // Category dropdown
         gbc.gridx = 0;
         gbc.gridy = 1;
@@ -380,13 +362,13 @@ public class ProductManagement extends JFrame {
         JLabel categoryLabel = new JLabel("Category:");
         categoryLabel.setForeground(Color.WHITE);
         formPanel.add(categoryLabel, gbc);
-        
+
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         JComboBox<String> categoryBox = new JComboBox<>(new String[]{"DRINK", "MEAL", "MERCHANDISE"});
         styleComboBox(categoryBox);
         formPanel.add(categoryBox, gbc);
-        
+
         // Price field
         gbc.gridx = 0;
         gbc.gridy = 2;
@@ -394,7 +376,7 @@ public class ProductManagement extends JFrame {
         JLabel priceLabel = new JLabel("Price:");
         priceLabel.setForeground(Color.WHITE);
         formPanel.add(priceLabel, gbc);
-        
+
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         JTextField priceField = new JTextField(20);
@@ -402,31 +384,59 @@ public class ProductManagement extends JFrame {
         priceField.setForeground(Color.WHITE);
         priceField.setCaretColor(Color.WHITE);
         formPanel.add(priceField, gbc);
-        
-        // Image URL field
+
+        // Image URL field with file chooser
         gbc.gridx = 0;
         gbc.gridy = 3;
         gbc.weightx = 0.0;
         JLabel imageLabel = new JLabel("Image URL:");
         imageLabel.setForeground(Color.WHITE);
         formPanel.add(imageLabel, gbc);
-        
+
         gbc.gridx = 1;
         gbc.weightx = 1.0;
+        JPanel imagePanel = new JPanel(new BorderLayout(5, 0));
+        imagePanel.setBackground(TABLE_BG);
+
         JTextField imageField = new JTextField(20);
         imageField.setBackground(INPUT_BG);
         imageField.setForeground(Color.WHITE);
         imageField.setCaretColor(Color.WHITE);
-        formPanel.add(imageField, gbc);
-        
-        // Availability checkbox
+        imagePanel.add(imageField, BorderLayout.CENTER);
+
+        JButton browseBtn = new JButton("Browse");
+        styleButton(browseBtn, BTN_DEFAULT, Color.WHITE);
+        // In the browseBtn action listener:
+        browseBtn.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                "Image files", "jpg", "jpeg", "png", "gif"));
+
+            if (fileChooser.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
+                File selectedFile = fileChooser.getSelectedFile();
+                try {
+                    String savedFileName = ImageHandler.saveUploadedImage(selectedFile);
+                    imageField.setText(savedFileName); // Store just the filename
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(dialog, 
+                        "Error saving image: " + ex.getMessage(), 
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                    ex.printStackTrace();
+                }
+            }
+        });
+
+        imagePanel.add(browseBtn, BorderLayout.EAST);
+        formPanel.add(imagePanel, gbc);
+
         gbc.gridx = 0;
         gbc.gridy = 4;
         gbc.weightx = 0.0;
         JLabel availableLabel = new JLabel("Available:");
         availableLabel.setForeground(Color.WHITE);
         formPanel.add(availableLabel, gbc);
-        
+
         gbc.gridx = 1;
         gbc.weightx = 1.0;
         JCheckBox availableBox = new JCheckBox();
@@ -434,7 +444,7 @@ public class ProductManagement extends JFrame {
         availableBox.setBackground(TABLE_BG);
         availableBox.setForeground(Color.WHITE);
         formPanel.add(availableBox, gbc);
-        
+
         // Description text area
         gbc.gridx = 0;
         gbc.gridy = 5;
@@ -442,7 +452,7 @@ public class ProductManagement extends JFrame {
         JLabel descLabel = new JLabel("Description:");
         descLabel.setForeground(Color.WHITE);
         formPanel.add(descLabel, gbc);
-        
+
         gbc.gridx = 0;
         gbc.gridy = 6;
         gbc.gridwidth = 2;
@@ -458,15 +468,15 @@ public class ProductManagement extends JFrame {
         JScrollPane descScroll = new JScrollPane(descArea);
         descScroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
         formPanel.add(descScroll, gbc);
-        
+
         // Button panel
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.setBackground(DARK_BG);
-        
+
         JButton cancelBtn = new JButton("Cancel");
         styleButton(cancelBtn, BTN_DEFAULT, Color.WHITE);
         cancelBtn.addActionListener(e -> dialog.dispose());
-        
+
         JButton saveBtn = new JButton("Save Product");
         styleButton(saveBtn, BTN_SUCCESS, Color.WHITE);
         saveBtn.addActionListener(e -> {
@@ -475,7 +485,7 @@ public class ProductManagement extends JFrame {
                 JOptionPane.showMessageDialog(dialog, "Product name cannot be empty", "Validation Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            
+
             double price;
             try {
                 price = Double.parseDouble(priceField.getText().trim());
@@ -487,44 +497,44 @@ public class ProductManagement extends JFrame {
                 JOptionPane.showMessageDialog(dialog, "Please enter a valid price", "Validation Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            
-            // Save to database
+
             try (Connection conn = DBConnection.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(
                      "INSERT INTO products (name, description, price, category, image_url, is_available) VALUES (?, ?, ?, ?, ?, ?)"
                  )) {
-                
+
                 stmt.setString(1, nameField.getText().trim());
                 stmt.setString(2, descArea.getText().trim());
                 stmt.setDouble(3, price);
                 stmt.setString(4, (String) categoryBox.getSelectedItem());
+                // --- Use the filename stored in the text field ---
                 stmt.setString(5, imageField.getText().trim());
+                // --- End modification ---
                 stmt.setBoolean(6, availableBox.isSelected());
-                
+
                 int result = stmt.executeUpdate();
                 if (result > 0) {
-                    JOptionPane.showMessageDialog(dialog, 
-                        "Product added successfully", 
+                    JOptionPane.showMessageDialog(dialog,
+                        "Product added successfully",
                         "Success", JOptionPane.INFORMATION_MESSAGE);
                     dialog.dispose();
                     loadProductData(); // Refresh table
                 }
             } catch (SQLException ex) {
                 ex.printStackTrace();
-                JOptionPane.showMessageDialog(dialog, 
-                    "Error adding product: " + ex.getMessage(), 
+                JOptionPane.showMessageDialog(dialog,
+                    "Error adding product: " + ex.getMessage(),
                     "Database Error", JOptionPane.ERROR_MESSAGE);
             }
         });
-        
+
         buttonPanel.add(cancelBtn);
         buttonPanel.add(saveBtn);
-        
+
         dialog.add(formPanel, BorderLayout.CENTER);
         dialog.add(buttonPanel, BorderLayout.SOUTH);
         dialog.setVisible(true);
     }
-    
     
     private void editProduct() {
         setupDialogUI();
@@ -541,15 +551,15 @@ public class ProductManagement extends JFrame {
         
         // Fetch current product data
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM products WHERE product_id = ?")) {
-            
-            stmt.setInt(1, productId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    JDialog dialog = new JDialog(this, "Edit Product", true);
-                    dialog.setSize(500, 400);
-                    dialog.setLocationRelativeTo(this);
-                    dialog.setLayout(new BorderLayout());
+           PreparedStatement stmt = conn.prepareStatement("SELECT * FROM products WHERE product_id = ?")) {
+
+           stmt.setInt(1, productId);
+           try (ResultSet rs = stmt.executeQuery()) {
+               if (rs.next()) {
+                   JDialog dialog = new JDialog(this, "Edit Product", true);
+                   dialog.setSize(500, 400);
+                   dialog.setLocationRelativeTo(this);
+                   dialog.setLayout(new BorderLayout());
                     
                     JPanel formPanel = new JPanel(new GridBagLayout());
                     formPanel.setBackground(TABLE_BG);
@@ -605,7 +615,7 @@ public class ProductManagement extends JFrame {
                     priceField.setCaretColor(Color.WHITE);
                     formPanel.add(priceField, gbc);
                     
-                    // Image URL field
+                    // Image URL field with file chooser
                     gbc.gridx = 0;
                     gbc.gridy = 3;
                     gbc.weightx = 0.0;
@@ -615,11 +625,39 @@ public class ProductManagement extends JFrame {
                     
                     gbc.gridx = 1;
                     gbc.weightx = 1.0;
+                    JPanel imagePanel = new JPanel(new BorderLayout(5, 0));
+                    imagePanel.setBackground(TABLE_BG);
+                    
                     JTextField imageField = new JTextField(rs.getString("image_url"), 20);
                     imageField.setBackground(INPUT_BG);
                     imageField.setForeground(Color.WHITE);
                     imageField.setCaretColor(Color.WHITE);
-                    formPanel.add(imageField, gbc);
+                    imagePanel.add(imageField, BorderLayout.CENTER);
+                    
+                    JButton browseBtn = new JButton("Browse");
+                    styleButton(browseBtn, BTN_DEFAULT, Color.WHITE);
+                    // In the browseBtn action listener:
+                    browseBtn.addActionListener(e -> {
+                        JFileChooser fileChooser = new JFileChooser();
+                        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+                        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                            "Image files", "jpg", "jpeg", "png", "gif"));
+
+                        if (fileChooser.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
+                            File selectedFile = fileChooser.getSelectedFile();
+                            try {
+                                String savedFileName = ImageHandler.saveUploadedImage(selectedFile);
+                                imageField.setText(savedFileName); // Store just the filename
+                            } catch (IOException ex) {
+                                JOptionPane.showMessageDialog(dialog, 
+                                    "Error saving image: " + ex.getMessage(), 
+                                    "Error", JOptionPane.ERROR_MESSAGE);
+                                ex.printStackTrace();
+                            }
+                        }
+                    });
+                    imagePanel.add(browseBtn, BorderLayout.EAST);
+                    formPanel.add(imagePanel, gbc);
                     
                     // Availability checkbox
                     gbc.gridx = 0;
@@ -677,7 +715,7 @@ public class ProductManagement extends JFrame {
                             JOptionPane.showMessageDialog(dialog, "Product name cannot be empty", "Validation Error", JOptionPane.ERROR_MESSAGE);
                             return;
                         }
-                        
+
                         double price;
                         try {
                             price = Double.parseDouble(priceField.getText().trim());
@@ -689,22 +727,22 @@ public class ProductManagement extends JFrame {
                             JOptionPane.showMessageDialog(dialog, "Please enter a valid price", "Validation Error", JOptionPane.ERROR_MESSAGE);
                             return;
                         }
-                        
-                        // Update in database
-                        try (Connection conn2 = DBConnection.getConnection();
-                             PreparedStatement stmt2 = conn2.prepareStatement(
+
+                        // Update database - use a different connection variable name
+                        try (Connection updateConn = DBConnection.getConnection();
+                             PreparedStatement updateStmt = updateConn.prepareStatement(
                                  "UPDATE products SET name = ?, description = ?, price = ?, category = ?, image_url = ?, is_available = ? WHERE product_id = ?"
                              )) {
-                            
-                            stmt2.setString(1, nameField.getText().trim());
-                            stmt2.setString(2, descArea.getText().trim());
-                            stmt2.setDouble(3, price);
-                            stmt2.setString(4, (String) categoryBox.getSelectedItem());
-                            stmt2.setString(5, imageField.getText().trim());
-                            stmt2.setBoolean(6, availableBox.isSelected());
-                            stmt2.setInt(7, productId);
-                            
-                            int result = stmt2.executeUpdate();
+
+                            updateStmt.setString(1, nameField.getText().trim());
+                            updateStmt.setString(2, descArea.getText().trim());
+                            updateStmt.setDouble(3, price);
+                            updateStmt.setString(4, (String) categoryBox.getSelectedItem());
+                            updateStmt.setString(5, imageField.getText().trim());
+                            updateStmt.setBoolean(6, availableBox.isSelected());
+                            updateStmt.setInt(7, productId);
+
+                            int result = updateStmt.executeUpdate();
                             if (result > 0) {
                                 JOptionPane.showMessageDialog(dialog, 
                                     "Product updated successfully", 
@@ -731,14 +769,12 @@ public class ProductManagement extends JFrame {
         } catch (SQLException e) {
             e.printStackTrace();
             JOptionPane.showMessageDialog(this, 
-                "Error retrieving product data: " + e.getMessage(), 
+                "Error fetching product data: " + e.getMessage(), 
                 "Database Error", JOptionPane.ERROR_MESSAGE);
         }
     }
     
     private void deleteProduct() {
-        setupDialogUI(); // Apply consistent dialog styling
-        
         int selectedRow = productsTable.getSelectedRow();
         if (selectedRow == -1) {
             JOptionPane.showMessageDialog(this, 
@@ -750,20 +786,21 @@ public class ProductManagement extends JFrame {
         int productId = (int) productsTable.getValueAt(selectedRow, 0);
         String productName = (String) productsTable.getValueAt(selectedRow, 1);
         
-        // Confirm deletion
-        int option = JOptionPane.showConfirmDialog(this,
-            "Are you sure you want to delete the product: " + productName + "?",
+        // Confirmation dialog
+        setupDialogUI();
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Are you sure you want to delete the product:\n" + productName + "?",
             "Confirm Deletion",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE);
-            
-        if (option == JOptionPane.YES_OPTION) {
+        
+        if (confirm == JOptionPane.YES_OPTION) {
             try (Connection conn = DBConnection.getConnection();
                  PreparedStatement stmt = conn.prepareStatement("DELETE FROM products WHERE product_id = ?")) {
                 
                 stmt.setInt(1, productId);
-                int result = stmt.executeUpdate();
                 
+                int result = stmt.executeUpdate();
                 if (result > 0) {
                     JOptionPane.showMessageDialog(this, 
                         "Product deleted successfully", 
@@ -776,15 +813,6 @@ public class ProductManagement extends JFrame {
                     "Error deleting product: " + e.getMessage(), 
                     "Database Error", JOptionPane.ERROR_MESSAGE);
             }
-        }
-    }
-    
-    public static void main(String[] args) {
-        // Set the look and feel to the system look and feel
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 }

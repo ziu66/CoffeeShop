@@ -31,13 +31,21 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         private JLabel totalValue;
         private JLabel shippingValue;
         private JLabel checkoutSubtotalValue;
+        private JLabel checkoutSubtotalLabel;
         private JLabel checkoutShippingValue;
         private JLabel checkoutTotalValue;
         private CardLayout cardLayout;  // Add this field
         private static final int POINTS_PER_500_PESOS = 50;
         private JLabel rewardPointsLabel;
         private JLabel rewardDiscountLabel;
+        private JLabel checkoutRewardDiscountLabel;
         private double rewardDiscount = 0.0;
+        private boolean isDeliverySelected = true; 
+        private JCheckBox selectAllCheckbox;
+        private JPanel selectAllPanel;
+        private JPanel orderConfirmationPanel; // <-- ADD THIS LINE
+        private JLabel orderIdLabel; 
+        private Reward appliedReward = null;
 
         private final Color BACKGROUND_COLOR = new Color(40, 40, 40);
         private final Color DARKER_BG = new Color(30, 30, 30);
@@ -52,18 +60,31 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         private static final Color COMBO_BOX_SELECTION = new Color(70, 70, 70);
         private static final Color COMBO_BOX_BORDER = new Color(80, 80, 80);
 
-
-         public CartManager(User user) {
+        public CartManager(User user) {
             this.currentUser = user;
             // Initialize all UI components once
-            this.cartTotalLabel = new JLabel("Selected Total: ₱0.00");
-            this.subtotalLabel = new JLabel("Subtotal (0 items)");
-            this.subtotalValue = new JLabel("₱0.00");
-            this.totalValue = new JLabel("₱0.00");
-            this.shippingValue = new JLabel("₱0.00");
-            this.cardLayout = new CardLayout();
-            
+            this.cartTotalLabel = new JLabel("Selected Total: ₱0.00"); // Used in Cart view only
+            this.subtotalLabel = new JLabel("Subtotal (0 items)"); // Used in Cart view summary
+            this.subtotalValue = new JLabel("₱0.00"); // Used in Cart view summary
+            this.totalValue = new JLabel("₱0.00"); // Used in Cart view summary (without shipping)
+           
+            this.checkoutSubtotalLabel = new JLabel("Subtotal (0 items)"); // <-- INITIALIZE NEW INSTANCE VARIABLE
+            this.checkoutSubtotalValue = new JLabel("₱0.00");
+            this.checkoutShippingValue = new JLabel("₱0.00");
+            this.checkoutTotalValue = new JLabel("₱0.00");
+            this.checkoutRewardDiscountLabel = new JLabel("");
 
+            this.checkoutSubtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            this.checkoutSubtotalLabel.setForeground(SECONDARY_TEXT);
+            this.checkoutSubtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            this.checkoutSubtotalValue.setForeground(TEXT_COLOR);
+            this.checkoutShippingValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            this.checkoutShippingValue.setForeground(TEXT_COLOR);
+            this.checkoutRewardDiscountLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            this.checkoutRewardDiscountLabel.setForeground(new Color(0, 200, 0)); // Green
+            this.checkoutTotalValue.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            this.checkoutTotalValue.setForeground(ACCENT_COLOR);
+            
             cartTotalLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
             cartTotalLabel.setForeground(TEXT_COLOR);
             subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
@@ -72,6 +93,13 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             subtotalValue.setForeground(TEXT_COLOR);
             totalValue.setFont(new Font("Segoe UI", Font.BOLD, 16));
             totalValue.setForeground(ACCENT_COLOR);
+
+            // Initialize rewardDiscountLabel for Cart view
+            rewardDiscountLabel = new JLabel(""); // Initialize instance variable
+            rewardDiscountLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            rewardDiscountLabel.setForeground(new Color(0, 200, 0)); // Green color for discount
+            rewardDiscountLabel.setVisible(false); // Initially hidden
+
 
             loadCartItems();
         }
@@ -82,18 +110,12 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
 
        public double getCartTotal() {
             double total = 0.0;
-            System.out.println("Debug - Checking cart items selection state:");
             for (CartItem item : cartItems) {
-                System.out.printf("- %s: selected=%b, qty=%d%n", 
-                    item.getItem().getName(), 
-                    item.isSelected(), 
-                    item.getQuantity());
                 if (item.isSelected()) {
                     double itemTotal = item.getItem().getPrice() * item.getQuantity();
                     total += itemTotal;
                 }
             }
-            System.out.println("Calculated cart total: ₱" + total);
             return total;
         }
 
@@ -101,10 +123,9 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             this.cardPanel = cardPanel;
         }
 
-        
         public JPanel createCartPanel(JPanel cardPanel, CardLayout cardLayout) {
             this.cardPanel = cardPanel;
-            this.cardLayout = cardLayout; 
+            this.cardLayout = cardLayout;
 
             // Initialize the summary labels with current values
             updateSummary();
@@ -124,71 +145,94 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             titlePanel.add(titleLabel, BorderLayout.WEST);
             cartPanel.add(titlePanel, BorderLayout.NORTH);
 
-            // Items Panel
+            // Items Panel - Set layout ONCE here
             JPanel itemsPanel = new JPanel();
-            itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS));
-            itemsPanel.setBackground(BACKGROUND_COLOR);
+            itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS)); // Set layout once
+            itemsPanel.setBackground(BACKGROUND_COLOR); // Keep main items panel background dark
             itemsPanel.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 20)); // Add left/right padding
-            
-             itemsPanel.add(Box.createRigidArea(new Dimension(0, 0)));
 
-             
+            // Select All Panel setup - Create the panel and checkbox instances
+            this.selectAllPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); // Changed to 0,0 for tighter layout
+            this.selectAllPanel.setBackground(DARKER_BG); // Use darker background for this row
+            this.selectAllPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            this.selectAllPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 40)); // Fixed height but allow width to expand
+            this.selectAllPanel.setAlignmentX(Component.LEFT_ALIGNMENT); // Ensure left alignment in BoxLayout
+
+            this.selectAllCheckbox = new JCheckBox("SELECT ALL"); // Use the instance variable
+            this.selectAllCheckbox.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            this.selectAllCheckbox.setForeground(TEXT_COLOR);
+            this.selectAllCheckbox.setBackground(DARKER_BG); // Match panel background
+
+            // Add the selectAll checkbox to its panel
+            this.selectAllPanel.add(this.selectAllCheckbox); // Use the instance variable
+
+            // Add the selectAllPanel to the itemsPanel unconditionally
+            // Its visibility will be managed in updateCartDisplay
+            itemsPanel.add(this.selectAllPanel); // Use the instance variable
+            itemsPanel.add(Box.createVerticalStrut(5)); // Small space after select all
+
+
+            // Listener for selectAll - This listener WILL rebuild the list
+            this.selectAllCheckbox.addActionListener(e -> { // Use the instance variable
+                boolean selected = this.selectAllCheckbox.isSelected();
+                // Update selection state in data model
+                cartItems.forEach(item -> item.setSelected(selected));
+                // Rebuild the UI to reflect changes (indicator colors, empty state, etc.)
+                // Pass the itemsPanel and the instance selectAllCheckbox
+                updateCartDisplay(itemsPanel, this.selectAllCheckbox); // Pass necessary components
+                updateSummary(); // Update totals
+            });
+
+
+            // Add items or empty message
             if (cartItems.isEmpty()) {
                 JPanel emptyPanel = new JPanel(new BorderLayout());
-                emptyPanel.setBackground(DARKER_BG);
+                emptyPanel.setBackground(DARKER_BG); // Use darker background for the empty message area
                 emptyPanel.setBorder(BorderFactory.createEmptyBorder(40, 20, 40, 20));
+                emptyPanel.setAlignmentX(Component.LEFT_ALIGNMENT); // Align in BoxLayout
 
                 JLabel emptyLabel = new JLabel("Your cart is empty", SwingConstants.CENTER);
                 emptyLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
                 emptyLabel.setForeground(SECONDARY_TEXT);
                 emptyPanel.add(emptyLabel, BorderLayout.CENTER);
                 itemsPanel.add(emptyPanel);
+
+                // Hide the selectAll panel when the cart is empty
+                this.selectAllPanel.setVisible(false); // Use the instance variable and hide the panel
+
             } else {
-                // Select All Panel
-                JPanel selectAllPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); // Changed to 0,0 for tighter layout
-                selectAllPanel.setBackground(DARKER_BG);
-                selectAllPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-                selectAllPanel.setPreferredSize(new Dimension(500, 40)); // Fixed height
-                selectAllPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 40)); // Fixed height but allow width to expand
+                // Show the selectAll panel if it was hidden
+                this.selectAllPanel.setVisible(true); // Use the instance variable
 
-                JCheckBox selectAll = new JCheckBox("SELECT ALL");
-                selectAll.setFont(new Font("Segoe UI", Font.BOLD, 14));
-                selectAll.setForeground(TEXT_COLOR);
-                selectAll.setBackground(DARKER_BG);
-
-                boolean allSelected = !cartItems.isEmpty() && cartItems.stream().allMatch(CartItem::isSelected);
-                selectAll.setSelected(allSelected);
-
-                selectAll.addActionListener(e -> {
-                    boolean selected = selectAll.isSelected();
-                    cartItems.forEach(item -> item.setSelected(selected));
-                    updateCartDisplay(itemsPanel);
-                    updateSummary();
-                });
-
-               selectAllPanel.add(selectAll);
-               itemsPanel.add(selectAllPanel);
-               itemsPanel.add(Box.createVerticalStrut(5));
-
-                for (CartItem item : cartItems) {
-                itemsPanel.add(createCartItemPanel(item, itemsPanel));
-                itemsPanel.add(Box.createVerticalStrut(5));
+                 // Add individual cart items
+                 for (CartItem item : cartItems) {
+                     // Pass itemsPanel (parent) and the instance selectAllCheckbox
+                     JPanel itemPanel = createCartItemPanel(item, itemsPanel, this.selectAllCheckbox); // Pass necessary components
+                     itemPanel.setAlignmentX(Component.LEFT_ALIGNMENT); // Ensure left alignment in BoxLayout
+                     itemsPanel.add(itemPanel);
+                     itemsPanel.add(Box.createVerticalStrut(5));
+                 }
             }
-        }
+
+            // Add vertical glue at the end to push items to the top and fill space
+            // This helps the background fill correctly even with few items (always added)
+            itemsPanel.add(Box.createVerticalGlue());
+
 
             JScrollPane scrollPane = new JScrollPane(itemsPanel);
-            scrollPane.setBorder(BorderFactory.createEmptyBorder());
-            scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-            scrollPane.getViewport().setBackground(BACKGROUND_COLOR);
+            scrollPane.setBorder(BorderFactory.createEmptyBorder()); // Remove scroll pane border
+            scrollPane.getVerticalScrollBar().setUnitIncrement(16); // Faster scrolling
+            scrollPane.getViewport().setBackground(BACKGROUND_COLOR); // Match scrollpane viewport background to main panel
             cartPanel.add(scrollPane, BorderLayout.CENTER);
 
-            // Order Summary Panel
+
+            // Order Summary Panel (rest of this section remains the same)
             JPanel summaryPanel = new JPanel();
             summaryPanel.setLayout(new BoxLayout(summaryPanel, BoxLayout.Y_AXIS));
-            summaryPanel.setBackground(DARKER_BG);
+            summaryPanel.setBackground(DARKER_BG); // Use darker background for summary
             summaryPanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR),
-                BorderFactory.createEmptyBorder(8, 15, 8, 15)
+                BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR), // Top border
+                BorderFactory.createEmptyBorder(8, 15, 8, 15) // Internal padding
             ));
 
             // Subtotal Panel - Create new labels here that reference the instance variables
@@ -196,22 +240,20 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             subtotalPanel.setBackground(DARKER_BG);
             subtotalPanel.setBorder(null);
 
-            // Create new labels that will mirror the instance variables
-            JLabel currentSubtotalLabel = new JLabel(subtotalLabel.getText());
-            JLabel currentSubtotalValue = new JLabel(subtotalValue.getText());
+            JLabel currentSubtotalLabel = new JLabel(subtotalLabel.getText()); // Use instance label's text
+            JLabel currentSubtotalValue = new JLabel(subtotalValue.getText()); // Use instance label's text
 
-            // Copy the styles from the instance labels
-            currentSubtotalLabel.setFont(subtotalLabel.getFont());
-            currentSubtotalLabel.setForeground(subtotalLabel.getForeground());
-            currentSubtotalValue.setFont(subtotalValue.getFont());
-            currentSubtotalValue.setForeground(subtotalValue.getForeground());
+            currentSubtotalLabel.setFont(subtotalLabel.getFont()); // Copy font
+            currentSubtotalLabel.setForeground(subtotalLabel.getForeground()); // Copy color
+            currentSubtotalValue.setFont(subtotalValue.getFont()); // Copy font
+            currentSubtotalValue.setForeground(subtotalValue.getForeground()); // Copy color
 
             subtotalPanel.add(currentSubtotalLabel, BorderLayout.WEST);
             subtotalPanel.add(currentSubtotalValue, BorderLayout.EAST);
             summaryPanel.add(subtotalPanel);
 
-            // Voucher Panel
-            JPanel voucherPanel = new JPanel(new BorderLayout(5, 0));
+            // Voucher/Reward Discount Panel
+            JPanel voucherPanel = new JPanel(new BorderLayout());
             voucherPanel.setBackground(DARKER_BG);
             voucherPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
@@ -221,10 +263,9 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
 
             JTextField voucherField = new JTextField();
             voucherField.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
-            voucherField.setBackground(new Color(50, 50, 50));
+            voucherField.setBackground(new Color(50, 50, 50)); // Input background
             voucherField.setForeground(TEXT_COLOR);
             voucherField.setCaretColor(TEXT_COLOR);
-            voucherField.setPreferredSize(new Dimension(150, 22));
 
             JButton applyBtn = new JButton("APPLY");
             applyBtn.setBackground(SUCCESS_COLOR);
@@ -234,45 +275,75 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             applyBtn.setFocusPainted(false);
             applyBtn.setPreferredSize(new Dimension(60, 22));
 
+            JButton removeBtn = new JButton("REMOVE");
+            removeBtn.setBackground(new Color(200, 50, 50)); // Red for remove
+            removeBtn.setForeground(Color.WHITE);
+            removeBtn.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            removeBtn.setBorderPainted(false);
+            removeBtn.setFocusPainted(false);
+            removeBtn.setPreferredSize(new Dimension(70, 22));
+            removeBtn.setEnabled(false); // Disabled initially
+            removeBtn.setVisible(true); // Always visible
+
+            // Button panel for Apply/Remove buttons
+            JPanel buttonPanel = new JPanel(new GridLayout(1, 2, 5, 0)); // 1 row, 2 cols, 5px horizontal gap
+            buttonPanel.setBackground(DARKER_BG);
+            buttonPanel.add(applyBtn);
+            buttonPanel.add(removeBtn);
+
+            // Input panel for voucher field and buttons
+            JPanel inputPanel = new JPanel(new BorderLayout(5, 0)); // 5px horizontal gap
+            inputPanel.setBackground(DARKER_BG);
+            inputPanel.add(voucherField, BorderLayout.CENTER); // Field takes center
+            inputPanel.add(buttonPanel, BorderLayout.EAST); // Buttons on the right
+
+            voucherPanel.add(voucherLabel, BorderLayout.WEST); // Label on the left
+            voucherPanel.add(inputPanel, BorderLayout.CENTER); // Input area fills center
+            summaryPanel.add(voucherPanel);
+
+            // Add the reward discount label here, managed by updateSummary
+            summaryPanel.add(this.rewardDiscountLabel); // Use the instance variable
+            summaryPanel.add(Box.createVerticalStrut(10)); // Space before total
+
+            // Updated apply button action listener
             applyBtn.addActionListener(e -> {
                 String voucherCode = voucherField.getText().trim();
                 if (!voucherCode.isEmpty()) {
                     try {
-                        // Check if this is a valid reward code
                         Reward redemption = getRewardRedemption(voucherCode, currentUser.getUserId());
-                        if (redemption != null) {
-                            // Apply the discount based on reward type
-                            if (redemption.getName().contains("50%")) {
-                                double subtotal = getCartTotal();
-                                rewardDiscount = subtotal * 0.5;
-                                rewardDiscountLabel.setText("Reward Discount: -₱" + String.format("%.2f", rewardDiscount));
-                                rewardDiscountLabel.setVisible(true);
-                                updateSummary();
-                                JOptionPane.showMessageDialog(checkoutPanel,
-                                    "50% discount applied successfully!",
-                                    "Reward Applied",
-                                    JOptionPane.INFORMATION_MESSAGE);
-                            } else if (redemption.getName().contains("Free")) {
-                                // Handle free item rewards if needed
-                                // You might need additional logic here
-                            } else {
-                                // Default fixed discount
-                                rewardDiscount = redemption.getDiscountAmount();
-                                rewardDiscountLabel.setText("Reward Discount: -₱" + String.format("%.2f", rewardDiscount));
-                                rewardDiscountLabel.setVisible(true);
-                                updateSummary();
-                                JOptionPane.showMessageDialog(checkoutPanel,
-                                    "Reward applied successfully!",
-                                    "Reward Applied",
-                                    JOptionPane.INFORMATION_MESSAGE);
-                            }
-                        } else {
+                        if (redemption != null && !redemption.isRedeemed()) { // Check if NOT already used
+                            // Mark voucher as used in DB (if applicable to your rewards logic)
+                            // updateRewardRedemptionStatus(redemption.getRedemptionId(), true); // Assuming you have this method
+                            rewardDiscount = redemption.getDiscountAmount();
+                            // Update the labels directly
+                            rewardDiscountLabel.setText("Reward Discount: -₱" + String.format("%.2f", rewardDiscount));
+                            rewardDiscountLabel.setVisible(true);
+                            // Update the label in checkout panel too
+                            checkoutRewardDiscountLabel.setText("-₱" + String.format("%.2f", rewardDiscount));
+                            checkoutRewardDiscountLabel.setVisible(rewardDiscount > 0);
+                            removeBtn.setEnabled(true);
+                            voucherField.setText(""); // Clear field on success
+                            updateSummary(); // Recalculate and update totals
+
                             JOptionPane.showMessageDialog(checkoutPanel,
-                                "Invalid or expired voucher code",
-                                "Invalid Code",
-                                JOptionPane.WARNING_MESSAGE);
+                                "Voucher applied successfully! (-₱" + String.format("%.2f", rewardDiscount) + ")",
+                                "Voucher Applied",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        } else {
+                             rewardDiscount = 0.0; // Ensure discount is reset
+                             // Update the labels to hidden/zero
+                             rewardDiscountLabel.setVisible(false);
+                             checkoutRewardDiscountLabel.setVisible(false);
+                             removeBtn.setEnabled(false);
+                             updateSummary(); // Recalculate and update totals
+
+                             JOptionPane.showMessageDialog(checkoutPanel,
+                                 (redemption != null && redemption.isRedeemed()) ? "This voucher has already been used." : "Invalid or expired voucher code",
+                                 "Invalid Code",
+                                 JOptionPane.WARNING_MESSAGE);
                         }
                     } catch (SQLException ex) {
+                        ex.printStackTrace();
                         JOptionPane.showMessageDialog(checkoutPanel,
                             "Error validating voucher: " + ex.getMessage(),
                             "Error",
@@ -285,41 +356,57 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
                         JOptionPane.WARNING_MESSAGE);
                 }
             });
-            
-            JPanel voucherInputPanel = new JPanel(new BorderLayout(5, 0));
-            voucherInputPanel.setBackground(DARKER_BG);
-            voucherInputPanel.add(voucherField, BorderLayout.CENTER);
-            voucherInputPanel.add(applyBtn, BorderLayout.EAST);
 
-            voucherPanel.add(voucherLabel, BorderLayout.WEST);
-            voucherPanel.add(voucherInputPanel, BorderLayout.CENTER);
-            summaryPanel.add(voucherPanel);
-            summaryPanel.add(Box.createVerticalStrut(10));
 
-            // Total Panel - Create new label that references the instance variable
+            // Remove button action listener
+            removeBtn.addActionListener(e -> {
+                rewardDiscount = 0.0; // Reset discount
+                rewardDiscountLabel.setText(""); // Clear text
+                rewardDiscountLabel.setVisible(false); // Hide label
+                checkoutRewardDiscountLabel.setText(""); // Clear checkout label
+                checkoutRewardDiscountLabel.setVisible(false); // Hide checkout label
+                removeBtn.setEnabled(false); // Disable remove button
+                updateSummary(); // Recalculate and update totals
+                 // No need to update checkout totals here, updateSummary handles it
+            });
+
+            // Initialize remove button state based on initial rewardDiscount value
+            removeBtn.setEnabled(rewardDiscount > 0);
+
+
+            // Total Panel
             JPanel totalPanel = new JPanel(new BorderLayout());
             totalPanel.setBackground(DARKER_BG);
-            totalPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+            totalPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR), // Top border
+                BorderFactory.createEmptyBorder(10, 0, 0, 0) // Internal padding
+            ));
 
             JLabel totalTextLabel = new JLabel("Total");
             totalTextLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
             totalTextLabel.setForeground(TEXT_COLOR);
 
-            // Create new label that mirrors the instance variable
+            // Create new label that mirrors the instance variable totalValue
             JLabel currentTotalValue = new JLabel(totalValue.getText());
-            currentTotalValue.setFont(totalValue.getFont());
-            currentTotalValue.setForeground(totalValue.getForeground());
+            currentTotalValue.setFont(totalValue.getFont()); // Copy font
+            currentTotalValue.setForeground(totalValue.getForeground()); // Copy color
 
             totalPanel.add(totalTextLabel, BorderLayout.WEST);
             totalPanel.add(currentTotalValue, BorderLayout.EAST);
             summaryPanel.add(totalPanel);
-            
-            // Add this to your cart panel creation code
-            totalValue.addPropertyChangeListener("text", e -> {
-                if ("₱60.00".equals(totalValue.getText()) && getSelectedItemCount() == 0) {
-                    totalValue.setText("₱0.00");
-                }
-            });
+
+            // Add property change listeners to the instance labels to update the local labels
+             subtotalLabel.addPropertyChangeListener("text", evt -> {
+                 currentSubtotalLabel.setText(subtotalLabel.getText());
+             });
+             subtotalValue.addPropertyChangeListener("text", evt -> {
+                 currentSubtotalValue.setText(subtotalValue.getText());
+             });
+             totalValue.addPropertyChangeListener("text", evt -> {
+                 currentTotalValue.setText(totalValue.getText());
+             });
+             // No need for rewardDiscountLabel listener here, it's updated directly
+
 
             // Checkout Button
             JButton checkoutBtn = new JButton("CHECKOUT");
@@ -329,8 +416,9 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             checkoutBtn.setBorderPainted(false);
             checkoutBtn.setFocusPainted(false);
             checkoutBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            checkoutBtn.setPreferredSize(new Dimension(200, 40));
+            checkoutBtn.setPreferredSize(new Dimension(200, 40)); // Set preferred size
 
+            // Hover effects
             checkoutBtn.addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
                     checkoutBtn.setBackground(HOVER_COLOR);
@@ -340,13 +428,14 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
                 }
             });
 
-            
+
             checkoutBtn.addActionListener(e -> {
                 if (getSelectedItemCount() > 0) {
                     try {
-                        updateCheckoutTotals(true); // Update totals but DON'T clear items
+                        // Initialize checkout with current delivery method
+                        updateCheckoutTotals(isDeliverySelected);
                         if (cardPanel != null && cardLayout != null) {
-                            cardLayout.show(cardPanel, "checkout"); // Just switch panels
+                            cardLayout.show(cardPanel, "checkout");
                         } else {
                             JOptionPane.showMessageDialog(null,
                                 "System error: Unable to proceed to checkout",
@@ -360,64 +449,69 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
                             JOptionPane.ERROR_MESSAGE);
                     }
                 } else {
-                    JOptionPane.showMessageDialog(cardPanel, 
+                    JOptionPane.showMessageDialog(cardPanel,
                         "Please select at least one item to checkout",
                         "No Items Selected",
                         JOptionPane.WARNING_MESSAGE);
                 }
             });
 
+            // Container for the checkout button
             JPanel buttonContainer = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 5));
             buttonContainer.setBackground(DARKER_BG);
             buttonContainer.add(checkoutBtn);
             summaryPanel.add(buttonContainer);
 
+            // Add the summary panel to the main cart panel
             cartPanel.add(summaryPanel, BorderLayout.SOUTH);
 
-            // Add a listener to update the local labels when the instance labels change
-            subtotalLabel.addPropertyChangeListener("text", evt -> {
-                currentSubtotalLabel.setText(subtotalLabel.getText());
-            });
-            subtotalValue.addPropertyChangeListener("text", evt -> {
-                currentSubtotalValue.setText(subtotalValue.getText());
-            });
-            totalValue.addPropertyChangeListener("text", evt -> {
-                currentTotalValue.setText(totalValue.getText());
-            });
+            // Set initial state of selectAll checkbox using the instance variable
+            boolean allSelectedOnInit = !cartItems.isEmpty() && cartItems.stream().allMatch(CartItem::isSelected);
+            this.selectAllCheckbox.setSelected(allSelectedOnInit); // Use the instance variable
+
 
             return cartPanel;
         }
         
         private void updateSummary() {
-            int selectedCount = getSelectedItemCount();
-            double subtotal = getCartTotal();
+        int selectedCount = getSelectedItemCount();
+        double subtotal = getCartTotal(); // Get total of *selected* items
+        // double total = subtotal - rewardDiscount; // Cart view total usually doesn't include shipping
 
-            if (subtotalLabel != null) {
-                subtotalLabel.setText("Subtotal (" + selectedCount + " items)");
-            }
-            if (subtotalValue != null) {
-                subtotalValue.setText("₱" + String.format("%.2f", subtotal));
-            }
-            if (totalValue != null) {
-                // Force 0.00 when no items are selected
-                double displayTotal = selectedCount > 0 ? subtotal : 0.00;
-                totalValue.setText("₱" + String.format("%.2f", displayTotal));
-            }
-            if (cartTotalLabel != null) {
-                cartTotalLabel.setText("Selected Total: ₱" + String.format("%.2f", subtotal));
-            }
-
-            if (cardPanel != null) {
-                cardPanel.revalidate();
-                cardPanel.repaint();
-            }
-            System.out.println("Debug - updateSummary called: " + 
-                 "selectedCount=" + selectedCount + 
-                 ", subtotal=" + subtotal + 
-                 ", totalValue=" + totalValue.getText());
+        if (subtotalLabel != null) {
+            subtotalLabel.setText("Subtotal (" + selectedCount + " items)");
+        }
+        if (subtotalValue != null) {
+            subtotalValue.setText("₱" + String.format("%.2f", subtotal));
+        }
+        // FIX: Update the cart total label considering only subtotal and reward discount
+        if (totalValue != null) { // Cart total label (usually excludes shipping)
+            double cartTotal = subtotal - rewardDiscount;
+            // Only show total if there are selected items, or if a discount was applied with 0 subtotal (though unlikely)
+            double displayCartTotal = (selectedCount > 0 || rewardDiscount > 0) ? cartTotal : 0.00;
+            if (displayCartTotal < 0) displayCartTotal = 0; // Ensure cart total also doesn't go below zero
+            totalValue.setText("₱" + String.format("%.2f", displayCartTotal));
+        }
+        // FIX: Update the cartTotalLabel at the top of the cart item list
+        if (cartTotalLabel != null) {
+            double currentCartSelectedTotal = subtotal - rewardDiscount; // This was previously just subtotal, now includes reward
+            if (currentCartSelectedTotal < 0) currentCartSelectedTotal = 0;
+            cartTotalLabel.setText("Selected Total: ₱" + String.format("%.2f", currentCartSelectedTotal));
         }
 
-    private JPanel createCartItemPanel(CartItem cartItem, JPanel parentPanel) {
+        // FIX: Update the reward discount label visibility based on the rewardDiscount value
+        if (rewardDiscountLabel != null) {
+            rewardDiscountLabel.setVisible(rewardDiscount > 0);
+        }
+
+
+        if (cardPanel != null) {
+            cardPanel.revalidate();
+            cardPanel.repaint();
+        }
+    }
+        
+    private JPanel createCartItemPanel(CartItem cartItem, JPanel parentPanel, JCheckBox selectAllCheckbox) { // Keep parameter for clarity, but use instance variable internally
         // Main panel with BorderLayout
         JPanel itemPanel = new JPanel(new BorderLayout(10, 0));
         itemPanel.setBackground(DARKER_BG);
@@ -426,25 +520,24 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
 
-        // Create a wrapper panel that will contain both indicator and content
+        Dimension cardSize = new Dimension(500, 120);
+        itemPanel.setPreferredSize(cardSize);
+        itemPanel.setMinimumSize(cardSize);
+        itemPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, cardSize.height));
+
         JPanel contentWrapper = new JPanel(new BorderLayout());
         contentWrapper.setBackground(DARKER_BG);
 
         // Indicator panel (left border)
         JPanel indicatorPanel = new JPanel();
         indicatorPanel.setPreferredSize(new Dimension(6, 0));
+        // Set background based on initial selection state
         indicatorPanel.setBackground(cartItem.isSelected() ? ACCENT_COLOR : new Color(0,0,0,0));
         contentWrapper.add(indicatorPanel, BorderLayout.WEST);
 
         // Content panel (right of indicator)
         JPanel contentPanel = new JPanel(new BorderLayout(10, 0));
         contentPanel.setBackground(DARKER_BG);
-
-        // Set fixed size for consistency
-        Dimension cardSize = new Dimension(500, 120);
-        contentPanel.setPreferredSize(cardSize);
-        contentPanel.setMinimumSize(cardSize);
-        contentPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, cardSize.height));
 
         JPanel leftPanel = new JPanel(new BorderLayout(15, 0));
         leftPanel.setBackground(DARKER_BG);
@@ -454,12 +547,22 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         selectBox.setBackground(DARKER_BG);
         selectBox.addActionListener(e -> {
             boolean newState = selectBox.isSelected();
-            System.out.println("Toggling selection for " + cartItem.getItem().getName() + 
+            System.out.println("Toggling selection for " + cartItem.getItem().getName() +
                               " to " + newState);
-            cartItem.setSelected(newState);
+            cartItem.setSelected(newState); // Update the data model
+
+            // Update indicator color directly on this panel
             indicatorPanel.setBackground(newState ? ACCENT_COLOR : new Color(0,0,0,0));
-            updateCartDisplay(parentPanel);
+
+            boolean allItemsNowSelected = cartItems.stream().allMatch(CartItem::isSelected);
+            if (this.selectAllCheckbox != null) { // Use instance variable
+                this.selectAllCheckbox.setSelected(allItemsNowSelected);
+            }
+
             updateSummary();
+
+            parentPanel.revalidate(); // Revalidate parent to ensure layout is correct
+            parentPanel.repaint();    // Repaint parent
         });
 
         JPanel infoPanel = new JPanel();
@@ -469,10 +572,22 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         JLabel nameLabel = new JLabel(cartItem.getItem().getName());
         nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
         nameLabel.setForeground(TEXT_COLOR);
+        nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel descLabel = new JLabel("Size: Regular");
-        descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        descLabel.setForeground(SECONDARY_TEXT);
+        // Use item description if available, otherwise default size text
+        String description = cartItem.getItem().getDescription(); // Use cartItem's MenuItem
+        JLabel descLabel;
+        if (description != null && !description.trim().isEmpty()) {
+             descLabel = new JLabel("<html><body style='width: 150px'>" + description + "</body></html>");
+             descLabel.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+             descLabel.setForeground(new Color(200, 200, 200));
+        } else {
+             descLabel = new JLabel("Size: Regular"); // Default text if no description
+             descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+             descLabel.setForeground(SECONDARY_TEXT);
+        }
+        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
 
         infoPanel.add(nameLabel);
         infoPanel.add(Box.createVerticalStrut(5));
@@ -518,24 +633,30 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         minusBtn.addActionListener(e -> {
             if (cartItem.getQuantity() > 1) {
                 int newQuantity = cartItem.getQuantity() - 1;
-                cartItem.setQuantity(newQuantity);
-                quantityLabel.setText(String.valueOf(newQuantity));
-                updateCartItemQuantity(cartItem.getItem().getProductId(), newQuantity);
-                updateSummary();
+                cartItem.setQuantity(newQuantity); // Update local list immediately for visual feedback
+                quantityLabel.setText(String.valueOf(newQuantity)); // Update quantity label
+                updateCartItemQuantity(cartItem.getItem().getProductId(), newQuantity); // Update DB
+                updateSummary(); // Update totals
+                 parentPanel.revalidate(); // Revalidate and repaint parent
+                 parentPanel.repaint();
             } else {
-                removeCartItem(cartItem.getItem().getProductId());
-                cartItems.remove(cartItem);
-                updateCartDisplay(parentPanel);
-                updateSummary();
+                // --- MODIFIED REMOVAL LOGIC ---
+                // If quantity is 1 and minus is clicked, remove the item completely
+                // Call the database removal method and then force a full UI refresh
+                removeCartItem(cartItem.getItem().getProductId()); // Remove from DB
+                forceCartRefresh(); // Reload data and rebuild UI
+
             }
         });
 
         plusBtn.addActionListener(e -> {
             int newQuantity = cartItem.getQuantity() + 1;
-            cartItem.setQuantity(newQuantity);
-            quantityLabel.setText(String.valueOf(newQuantity));
-            updateCartItemQuantity(cartItem.getItem().getProductId(), newQuantity);
-            updateSummary();
+            cartItem.setQuantity(newQuantity); // Update local list
+            quantityLabel.setText(String.valueOf(newQuantity)); // Update label
+            updateCartItemQuantity(cartItem.getItem().getProductId(), newQuantity); // Update DB
+            updateSummary(); // Update totals
+             parentPanel.revalidate(); // Revalidate and repaint parent
+             parentPanel.repaint();
         });
 
         quantityPanel.add(minusBtn);
@@ -551,12 +672,17 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         deleteBtn.setFocusPainted(false);
         deleteBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         deleteBtn.addActionListener(e -> {
-            removeCartItem(cartItem.getItem().getProductId());
-            cartItems.remove(cartItem);
-            updateCartDisplay(parentPanel);
-            updateSummary();
+            // --- MODIFIED REMOVAL LOGIC ---
+            // Call the database removal method and then force a full UI refresh
+            removeCartItem(cartItem.getItem().getProductId()); // Remove from DB
+            forceCartRefresh(); // Reload data and rebuild UI
+
+            // No need to manipulate local cartItems list here or call updateCartDisplay,
+            // forceCartRefresh handles the full sync.
+            // --- END MODIFIED REMOVAL LOGIC ---
         });
 
+        // Panel to hold quantity and remove button vertically
         JPanel buttonPanel = new JPanel(new BorderLayout());
         buttonPanel.setBackground(DARKER_BG);
         buttonPanel.add(quantityPanel, BorderLayout.CENTER);
@@ -577,63 +703,106 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         return itemPanel;
     }
 
-        private void updateCartDisplay(JPanel itemsPanel) {
-            itemsPanel.removeAll();
-            // Set the layout manager explicitly (important!)
-            itemsPanel.setLayout(new BoxLayout(itemsPanel, BoxLayout.Y_AXIS));
-            itemsPanel.setBackground(DARKER_BG);
+    private void updateCartDisplay(JPanel itemsPanel, JCheckBox selectAllCheckbox) {
+        itemsPanel.removeAll();
+        // Layout setting is now in createCartPanel
+        itemsPanel.setBackground(BACKGROUND_COLOR); // Main panel background
 
-            if (cartItems.isEmpty()) {
-                JPanel emptyPanel = new JPanel(new BorderLayout());
-                emptyPanel.setBackground(DARKER_BG);
-                emptyPanel.setBorder(BorderFactory.createEmptyBorder(40, 20, 40, 20));
-
-                JLabel emptyLabel = new JLabel("Your cart is empty", SwingConstants.CENTER);
-                emptyLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
-                emptyLabel.setForeground(SECONDARY_TEXT);
-                emptyPanel.add(emptyLabel, BorderLayout.CENTER);
-                itemsPanel.add(emptyPanel);
-            } else {
-                JPanel selectAllPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-                selectAllPanel.setBackground(DARKER_BG);
-                selectAllPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-                selectAllPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-                JCheckBox selectAll = new JCheckBox("SELECT ALL");
-                selectAll.setFont(new Font("Segoe UI", Font.BOLD, 14));
-                selectAll.setForeground(TEXT_COLOR);
-                selectAll.setBackground(DARKER_BG);
-
-                boolean allSelected = !cartItems.isEmpty() && cartItems.stream().allMatch(CartItem::isSelected);
-                selectAll.setSelected(allSelected);
-
-                selectAll.addActionListener(e -> {
-                    boolean selected = selectAll.isSelected();
-                    cartItems.forEach(item -> item.setSelected(selected));
-                    updateCartDisplay(itemsPanel);
-                    updateSummary();
-                });
-
-                selectAllPanel.add(selectAll);
-                itemsPanel.add(selectAllPanel);
-                itemsPanel.add(Box.createVerticalStrut(10));
-
-                for (CartItem item : cartItems) {
-                    JPanel itemPanel = createCartItemPanel(item, itemsPanel);
-                    itemPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-                    itemsPanel.add(itemPanel);
-                    // Use rigid area instead of strut for more consistent spacing
-                    itemsPanel.add(Box.createRigidArea(new Dimension(0, 5)));
-                }
-            }
-
-            updateSummary();
-
-            itemsPanel.revalidate();
-            itemsPanel.repaint();
+        // Re-add the selectAllPanel first (its visibility is handled below)
+        // Use the instance variable selectAllPanel
+        if (this.selectAllPanel != null) { // Add null check just in case, though it's initialized in createCartPanel
+             itemsPanel.add(this.selectAllPanel);
+             itemsPanel.add(Box.createVerticalStrut(5)); // Space after select all panel
         }
 
+        if (cartItems.isEmpty()) {
+            JPanel emptyPanel = new JPanel(new BorderLayout());
+            emptyPanel.setBackground(DARKER_BG);
+            emptyPanel.setBorder(BorderFactory.createEmptyBorder(40, 20, 40, 20));
+            emptyPanel.setAlignmentX(Component.LEFT_ALIGNMENT); // Align in BoxLayout
+
+            JLabel emptyLabel = new JLabel("Your cart is empty", SwingConstants.CENTER);
+            emptyLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+            emptyLabel.setForeground(SECONDARY_TEXT);
+            emptyPanel.add(emptyLabel, BorderLayout.CENTER);
+            itemsPanel.add(emptyPanel);
+
+            // Update selectAll checkbox and panel visibility
+            if (this.selectAllCheckbox != null) { // Use instance variable
+                 this.selectAllCheckbox.setSelected(false); // Cart is empty, so none are selected
+            }
+            if (this.selectAllPanel != null) { // Use instance variable
+                 this.selectAllPanel.setVisible(false); // Hide the panel when empty
+            }
+
+        } else {
+             // Update selectAll checkbox state based on current items
+             if (this.selectAllCheckbox != null) { // Use instance variable
+                 boolean allSelected = cartItems.stream().allMatch(CartItem::isSelected);
+                 this.selectAllCheckbox.setSelected(allSelected);
+             }
+             // Show the selectAll panel if it was hidden
+             if (this.selectAllPanel != null) { // Use instance variable
+                 this.selectAllPanel.setVisible(true);
+             }
+
+
+             // Add individual cart items
+             for (CartItem item : cartItems) {
+                 JPanel itemPanel = createCartItemPanel(item, itemsPanel, this.selectAllCheckbox); // Pass necessary components
+                 itemPanel.setAlignmentX(Component.LEFT_ALIGNMENT); // Ensure left alignment in BoxLayout
+                 itemsPanel.add(itemPanel);
+                 itemsPanel.add(Box.createVerticalStrut(5));
+             }
+        }
+
+        // Add vertical glue at the end (always)
+        itemsPanel.add(Box.createVerticalGlue());
+
+        itemsPanel.revalidate();
+        itemsPanel.repaint();
+    }
+ 
+     public void forceCartRefresh() {
+        System.out.println("[DEBUG] Force refreshing cart display...");
+
+        // 1. Reload cart items from database
+        loadCartItems(); // This updates the 'cartItems' list
+
+        updateSummary(); // This also updates the cart labels
+        updateCheckoutTotals(isDeliverySelected); // Update checkout labels based on current selection
+
+
+        if (cardPanel != null && cardLayout != null) {
+
+            JPanel newCartPanel = createCartPanel(cardPanel, cardLayout);
+
+            cardPanel.add(newCartPanel, "cart"); // Add the new panel with the existing name
+            System.out.println("[DEBUG] Added new cart panel, replacing old one.");
+
+
+            // 5. Force the container to revalidate and repaint its layout
+            cardPanel.revalidate();
+            cardPanel.repaint();
+             System.out.println("[DEBUG] Card panel revalidated and repainted.");
+
+             SwingUtilities.invokeLater(() -> {
+                 cardLayout.show(cardPanel, "cart");
+                  System.out.println("[DEBUG] Explicitly showing new cart panel.");
+             });
+
+
+            System.out.println("[DEBUG] Cart display refresh attempted.");
+
+        } else {
+             System.err.println("[DEBUG] cardPanel or cardLayout is null, cannot refresh cart display.");
+        }
+    }
+     
     public JPanel createCheckoutPanel(JPanel mainCardPanel, CardLayout cardLayout) {
+        this.cardPanel = mainCardPanel;
+        this.cardLayout = cardLayout;
+
         JPanel checkoutPanel = new JPanel(new BorderLayout());
         checkoutPanel.setBackground(BACKGROUND_COLOR);
         checkoutPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -644,7 +813,11 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         titlePanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 0));
 
         JButton backBtn = new JButton("← Back to Cart");
-        backBtn.addActionListener(e -> cardLayout.show(mainCardPanel, "cart"));
+            backBtn.addActionListener(e -> {
+                // When going back to cart, ensure summary shows cart totals (no shipping)
+                // updateCheckoutTotals(false); // updateSummary is called when cart is shown, which updates cart labels
+                cardLayout.show(mainCardPanel, "cart");
+            });
         backBtn.setContentAreaFilled(false);
         backBtn.setBorderPainted(false);
         backBtn.setFocusPainted(false);
@@ -681,11 +854,18 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         deliveryMethodPanel.add(Box.createVerticalStrut(15));
 
         ButtonGroup deliveryGroup = new ButtonGroup();
-        JRadioButton deliveryBtn = createStyledRadioButton("Delivery (₱60.00)", true);
-        JRadioButton pickupBtn = createStyledRadioButton("Pickup (Free)", false);
+        JRadioButton deliveryBtn = createStyledRadioButton("Delivery (₱60.00)", isDeliverySelected);
+        JRadioButton pickupBtn = createStyledRadioButton("Pickup (Free)", !isDeliverySelected);
 
-        deliveryBtn.addActionListener(e -> updateCheckoutTotals(true));
-        pickupBtn.addActionListener(e -> updateCheckoutTotals(false));
+        // Add listeners to update totals when delivery method changes
+        deliveryBtn.addActionListener(e -> {
+            isDeliverySelected = true;
+            updateCheckoutTotals(true); // Pass true for delivery
+        });
+        pickupBtn.addActionListener(e -> {
+            isDeliverySelected = false;
+            updateCheckoutTotals(false); // Pass false for pickup
+        });
 
         deliveryGroup.add(deliveryBtn);
         deliveryGroup.add(pickupBtn);
@@ -732,7 +912,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         // Custom renderer
         addressCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, 
+            public Component getListCellRendererComponent(JList<?> list, Object value,
                     int index, boolean isSelected, boolean cellHasFocus) {
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 setBackground(isSelected ? COMBO_BOX_SELECTION : COMBO_BOX_BG);
@@ -797,39 +977,34 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         gbc.gridwidth = 1;
         gbc.weightx = 0.5;
         contentPanel.add(addressPanel, gbc);
-        
+
         // Order Summary Panel
         JPanel summaryPanel = new JPanel();
         summaryPanel.setLayout(new BoxLayout(summaryPanel, BoxLayout.Y_AXIS));
         summaryPanel.setBackground(DARKER_BG);
         summaryPanel.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR),
-            BorderFactory.createEmptyBorder(8, 15, 8, 15)
+            BorderFactory.createLineBorder(BORDER_COLOR),
+            BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
-
-        JPanel priceDetailsPanel = new JPanel(new GridLayout(2, 1, 0, 2));
-        priceDetailsPanel.setBackground(DARKER_BG);
 
         JLabel summaryTitle = new JLabel("Order Summary");
         summaryTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         summaryTitle.setForeground(TEXT_COLOR);
+        // ADD THIS LINE to center the title
+        summaryTitle.setAlignmentX(Component.CENTER_ALIGNMENT); 
         summaryPanel.add(summaryTitle);
-        summaryPanel.add(Box.createVerticalStrut(8));
+        summaryPanel.add(Box.createVerticalStrut(15));
 
+        // Items list
         boolean firstItem = true;
         for (CartItem item : cartItems) {
-            if (item.isSelected()) { 
+            if (item.isSelected()) {
                 if (!firstItem) {
-                    JSeparator separator = new JSeparator();
-                    separator.setForeground(BORDER_COLOR);
-                    separator.setBackground(BORDER_COLOR);
-                    summaryPanel.add(separator);
                     summaryPanel.add(Box.createVerticalStrut(10));
                 }
 
                 JPanel itemPanel = new JPanel(new BorderLayout());
                 itemPanel.setBackground(DARKER_BG);
-                itemPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
                 JLabel itemName = new JLabel(item.getItem().getName() + " × " + item.getQuantity());
                 itemName.setFont(new Font("Segoe UI", Font.PLAIN, 14));
@@ -842,87 +1017,74 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
                 itemPanel.add(itemName, BorderLayout.WEST);
                 itemPanel.add(itemPrice, BorderLayout.EAST);
                 summaryPanel.add(itemPanel);
-                summaryPanel.add(Box.createVerticalStrut(5));
 
                 firstItem = false;
             }
         }
 
-        
-        summaryPanel.add(Box.createVerticalStrut(10));
+        summaryPanel.add(Box.createVerticalStrut(15));
 
-        JSeparator totalsSeparator = new JSeparator();
-        totalsSeparator.setForeground(BORDER_COLOR);
-        totalsSeparator.setBackground(BORDER_COLOR);
-        summaryPanel.add(totalsSeparator);
-        summaryPanel.add(Box.createVerticalStrut(10));
-
-        // Initialize labels if null
-        if (subtotalLabel == null) {
-            subtotalLabel = new JLabel("Subtotal (0 items)");
-            subtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-            subtotalLabel.setForeground(SECONDARY_TEXT);
-            subtotalLabel.setOpaque(false);
-        }
-
-        if (subtotalValue == null) {
-            subtotalValue = new JLabel("₱0.00");
-            subtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            subtotalValue.setForeground(TEXT_COLOR);
-            subtotalValue.setOpaque(false);
-        }
-
-        if (shippingValue == null) {
-            shippingValue = new JLabel("₱60.00");
-            shippingValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            shippingValue.setForeground(TEXT_COLOR);
-            shippingValue.setOpaque(false);
-        }
-
-        if (totalValue == null) {
-            totalValue = new JLabel("₱0.00");
-            totalValue.setFont(new Font("Segoe UI", Font.BOLD, 16));
-            totalValue.setForeground(ACCENT_COLOR);
-            totalValue.setOpaque(false);
-        }
-
-        // Update labels with current values
-        subtotalLabel.setText("Subtotal (" + getSelectedItemCount() + " items)");
-        subtotalValue.setText("₱" + String.format("%.2f", getCartTotal()));
-        shippingValue.setText("₱60.00");
-        totalValue.setText("₱" + String.format("%.2f", getCartTotal() + 60.00));
+        summaryPanel.add(Box.createVerticalStrut(15)); // Space before totals
 
         // Subtotal Panel
-        JPanel subtotalPanel = new JPanel(new BorderLayout());
+        JPanel subtotalPanel = new JPanel(new BorderLayout()); // Use BorderLayout for label and value
         subtotalPanel.setBackground(DARKER_BG);
-        subtotalPanel.setBorder(null);
-        subtotalPanel.add(subtotalLabel, BorderLayout.WEST);
-        subtotalPanel.add(subtotalValue, BorderLayout.EAST);
+        subtotalPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0)); // Add padding if needed
+
+        // Use the instance variables for labels
+        this.checkoutSubtotalLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12)); // Ensure consistent font/color
+        this.checkoutSubtotalLabel.setForeground(SECONDARY_TEXT);
+        this.checkoutSubtotalValue.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        this.checkoutSubtotalValue.setForeground(TEXT_COLOR);
+
+
+        // ADD the instance labels to the new subtotalPanel
+        subtotalPanel.add(this.checkoutSubtotalLabel, BorderLayout.WEST); 
+        subtotalPanel.add(this.checkoutSubtotalValue, BorderLayout.EAST); 
+
+        // ADD the subtotalPanel to the summaryPanel
+        summaryPanel.add(subtotalPanel); 
+
+        JPanel rewardPanel = new JPanel(new BorderLayout());
+        rewardPanel.setBackground(DARKER_BG);
+        rewardPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+
+        JLabel rewardLabel = new JLabel("Reward Discount"); // Local label for text
+        rewardLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        rewardLabel.setForeground(SECONDARY_TEXT);
+
+        rewardPanel.add(rewardLabel, BorderLayout.WEST); // Use local label for text
+        rewardPanel.add(this.checkoutRewardDiscountLabel, BorderLayout.EAST); // Use instance variable for value
+        summaryPanel.add(rewardPanel);
+
 
         // Shipping Panel
         JPanel shippingPanel = new JPanel(new BorderLayout());
         shippingPanel.setBackground(DARKER_BG);
-        JLabel shippingLabel = new JLabel("Shipping Fee");
+        shippingPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 15, 0)); // Add padding before Total
+
+        JLabel shippingLabel = new JLabel("Shipping Fee"); // Local label for text
         shippingLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         shippingLabel.setForeground(SECONDARY_TEXT);
-        shippingLabel.setOpaque(false);
-        shippingPanel.add(shippingLabel, BorderLayout.WEST);
-        shippingPanel.add(shippingValue, BorderLayout.EAST);
 
-        priceDetailsPanel.add(subtotalPanel);
-        priceDetailsPanel.add(shippingPanel);
-        summaryPanel.add(priceDetailsPanel);
+        shippingPanel.add(shippingLabel, BorderLayout.WEST); // Use local label for text
+        shippingPanel.add(this.checkoutShippingValue, BorderLayout.EAST); // Use instance variable for value
+        summaryPanel.add(shippingPanel);
 
         // Total Panel
         JPanel totalPanel = new JPanel(new BorderLayout());
         totalPanel.setBackground(DARKER_BG);
-        totalPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-        JLabel totalLabel = new JLabel("Total");
+        totalPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER_COLOR), // Top border
+            BorderFactory.createEmptyBorder(10, 0, 0, 0) // Internal padding
+        ));
+
+        JLabel totalLabel = new JLabel("Total"); // Local label for text
         totalLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
         totalLabel.setForeground(TEXT_COLOR);
-        totalPanel.add(totalLabel, BorderLayout.WEST);
-        totalPanel.add(totalValue, BorderLayout.EAST);
 
+        totalPanel.add(totalLabel, BorderLayout.WEST); // Use local label for text
+        totalPanel.add(this.checkoutTotalValue, BorderLayout.EAST); // Use instance variable for value
         summaryPanel.add(totalPanel);
 
         gbc.gridx = 1;
@@ -931,7 +1093,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         gbc.weightx = 0.5;
         contentPanel.add(summaryPanel, gbc);
 
-        // Payment Method Panel
+        // Payment Method Panel (No changes needed here for this specific issue)
         JPanel paymentPanel = new JPanel();
         paymentPanel.setLayout(new BoxLayout(paymentPanel, BoxLayout.Y_AXIS));
         paymentPanel.setBackground(DARKER_BG);
@@ -943,7 +1105,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         JLabel paymentTitle = new JLabel("Payment Method", SwingConstants.CENTER);
         paymentTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         paymentTitle.setForeground(TEXT_COLOR);
-        paymentTitle.setAlignmentX(Component.CENTER_ALIGNMENT); // Add this line
+        paymentTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
         paymentPanel.add(paymentTitle);
 
         paymentPanel.add(Box.createVerticalStrut(15));
@@ -980,7 +1142,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         gbc.weightx = 1.0;
         contentPanel.add(paymentPanel, gbc);
 
-        // Card Details Panel (unchanged)
+        // Card Details Panel (unchanged for this issue)
         JPanel cardDetailsPanel = new JPanel();
         cardDetailsPanel.setLayout(new BoxLayout(cardDetailsPanel, BoxLayout.Y_AXIS));
         cardDetailsPanel.setBackground(DARKER_BG);
@@ -997,7 +1159,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         cardDetailsTitle.setForeground(TEXT_COLOR);
         cardDetailsPanel.add(cardDetailsTitle);
         cardDetailsPanel.add(Box.createVerticalStrut(15));
-        
+
         JLabel cardNumberLabel = new JLabel("Card Number");
         cardNumberLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         cardNumberLabel.setForeground(TEXT_COLOR);
@@ -1076,6 +1238,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         gbc.gridwidth = 2;
         contentPanel.add(cardDetailsPanel, gbc);
 
+        // E-Wallet Details Panel (unchanged for this issue)
         JPanel walletDetailsPanel = new JPanel();
         walletDetailsPanel.setLayout(new BoxLayout(walletDetailsPanel, BoxLayout.Y_AXIS));
         walletDetailsPanel.setBackground(DARKER_BG);
@@ -1084,20 +1247,27 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
         walletDetailsPanel.setVisible(false);
-        walletDetailsPanel.setFocusable(true);
-         
+        walletDetailsPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
         JLabel walletDetailsTitle = new JLabel("E-Wallet Details", SwingConstants.CENTER);
         walletDetailsTitle.setFont(new Font("Segoe UI", Font.BOLD, 16));
         walletDetailsTitle.setForeground(TEXT_COLOR);
-        walletDetailsTitle.setAlignmentX(Component.CENTER_ALIGNMENT); // Add this line
+        walletDetailsTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
         walletDetailsPanel.add(walletDetailsTitle);
         walletDetailsPanel.add(Box.createVerticalStrut(15));
 
-        JLabel walletProviderLabel = new JLabel("E-Wallet Provider");
+        JPanel walletContentPanel = new JPanel();
+        walletContentPanel.setLayout(new BoxLayout(walletContentPanel, BoxLayout.Y_AXIS));
+        walletContentPanel.setBackground(DARKER_BG);
+        walletContentPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        walletContentPanel.setMaximumSize(new Dimension(300, Integer.MAX_VALUE));
+
+        JLabel walletProviderLabel = new JLabel("E-Wallet Provider", SwingConstants.CENTER);
         walletProviderLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         walletProviderLabel.setForeground(TEXT_COLOR);
-        walletDetailsPanel.add(walletProviderLabel);
-        walletDetailsPanel.add(Box.createVerticalStrut(5));
+        walletProviderLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        walletContentPanel.add(walletProviderLabel);
+        walletContentPanel.add(Box.createVerticalStrut(5));
 
         String[] walletProviders = {"GCash", "PayMaya", "GrabPay", "Coins.ph"};
         JComboBox<String> walletProviderDropdown = new JComboBox<>(walletProviders);
@@ -1105,14 +1275,17 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         walletProviderDropdown.setBackground(new Color(50, 50, 50));
         walletProviderDropdown.setForeground(TEXT_COLOR);
         walletProviderDropdown.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
-        walletDetailsPanel.add(walletProviderDropdown);
-        walletDetailsPanel.add(Box.createVerticalStrut(10));
+        walletProviderDropdown.setAlignmentX(Component.CENTER_ALIGNMENT);
+        walletProviderDropdown.setMaximumSize(new Dimension(200, 30));
+        walletContentPanel.add(walletProviderDropdown);
+        walletContentPanel.add(Box.createVerticalStrut(10));
 
-        JLabel mobileNumberLabel = new JLabel("Mobile Number");
+        JLabel mobileNumberLabel = new JLabel("Mobile Number", SwingConstants.CENTER);
         mobileNumberLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         mobileNumberLabel.setForeground(TEXT_COLOR);
-        walletDetailsPanel.add(mobileNumberLabel);
-        walletDetailsPanel.add(Box.createVerticalStrut(5));
+        mobileNumberLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        walletContentPanel.add(mobileNumberLabel);
+        walletContentPanel.add(Box.createVerticalStrut(5));
 
         JTextField mobileNumberField = new JTextField();
         mobileNumberField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
@@ -1120,13 +1293,18 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         mobileNumberField.setForeground(TEXT_COLOR);
         mobileNumberField.setCaretColor(TEXT_COLOR);
         mobileNumberField.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
-        walletDetailsPanel.add(mobileNumberField);
+        mobileNumberField.setAlignmentX(Component.CENTER_ALIGNMENT);
+        mobileNumberField.setMaximumSize(new Dimension(200, 30));
+        walletContentPanel.add(mobileNumberField);
+
+        walletDetailsPanel.add(walletContentPanel);
 
         gbc.gridx = 0;
         gbc.gridy = 4;
         gbc.gridwidth = 2;
         contentPanel.add(walletDetailsPanel, gbc);
 
+        // Payment method radio button listeners to toggle details panels
         cardBtn.addActionListener(e -> {
             cardDetailsPanel.setVisible(true);
             walletDetailsPanel.setVisible(false);
@@ -1149,6 +1327,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             contentPanel.revalidate();
             contentPanel.repaint();
         });
+
 
         JScrollPane scrollPane = new JScrollPane(contentPanel);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
@@ -1177,64 +1356,90 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
                 placeOrderBtn.setBackground(BUTTON_COLOR);
             }
         });
-        
+
         placeOrderBtn.addActionListener(e -> {
             if (getSelectedItemCount() > 0) {
                 placeOrderBtn.setEnabled(false); // Disable button to prevent double clicks
 
                 // Use SwingWorker for background processing
-                new SwingWorker<Boolean, Void>() {
+                new SwingWorker<Integer, Void>() { // Return type is Integer for orderId
+                    // --- ADD FIELDS HERE ---
+                    private Integer orderIdResult; // Field to hold the order ID
+                    private boolean isSuccess = false; // Field to indicate success/failure
+                    // --- END ADD FIELDS ---
+
                     @Override
-                    protected Boolean doInBackground() throws Exception {
+                    protected Integer doInBackground() throws Exception {
                         try {
-                            processOrder(currentUser);
-                            return true; // Success
+                            // Process order and return the orderId
+                            orderIdResult = processOrder(currentUser); // Assign to field
+                            isSuccess = true; // Assign to field
+                            return orderIdResult; // Return the orderId
                         } catch (SQLException ex) {
-                            return false; // Failure
+                            // Rethrow SQLException to be caught in done()
+                            throw ex;
+                        } catch (Exception ex) {
+                             // Wrap other exceptions in a generic Exception or runtime
+                             throw new RuntimeException("General Error during order processing", ex);
                         }
                     }
 
                     @Override
                     protected void done() {
                         try {
-                            boolean success = get(); // Get the result
-                            if (success) {
-                                // Show confirmation on success
-                                SwingUtilities.invokeLater(() -> {
-                                    cardLayout.show(mainCardPanel, "orderConfirmation");
-                                });
-                            }
+                             // No need to declare orderId or success here; use fields
+                             get(); // Call get() to check for exceptions from doInBackground
+
                         } catch (Exception ex) {
-                            // Show error message on failure
-                            SwingUtilities.invokeLater(() -> {
+                            // Catch exceptions from get() (InterruptedException, ExecutionException)
+                            // ExecutionException wraps the exception from doInBackground
+                            Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                            System.err.println("Error during order processing: " + cause.getMessage());
+                            cause.printStackTrace();
+
+                             SwingUtilities.invokeLater(() -> {
                                 JOptionPane.showMessageDialog(checkoutPanel,
-                                    "Error processing order: " + ex.getMessage(),
+                                    "There was an error processing your order. Please try again.\nError: " + cause.getMessage(),
                                     "Order Error",
                                     JOptionPane.ERROR_MESSAGE);
                             });
+
                         } finally {
-                            // Re-enable button in all cases
-                            SwingUtilities.invokeLater(() -> {
-                                placeOrderBtn.setEnabled(true);
-                                forceCartRefresh(); // Refresh cart display
-                            });
+
+                             SwingUtilities.invokeLater(() -> {
+                                 placeOrderBtn.setEnabled(true);
+                                 // This will rebuild the cart view.
+                                 forceCartRefresh();
+                             });
+
+                            if (isSuccess && orderIdResult != null) {
+                                SwingUtilities.invokeLater(() -> {
+                                    // Update the orderIdLabel using the instance variable
+                                    if (CartManager.this.orderIdLabel != null) {
+                                         CartManager.this.orderIdLabel.setText("Order ID: ORD" + orderIdResult); // Use the actual orderIdResult field
+                                    }
+                                    cardLayout.show(mainCardPanel, "orderConfirmation"); // Switch view
+                                });
+                             }
                         }
                     }
-                }.execute();
+                }.execute(); // Execute the SwingWorker
             } else {
-                JOptionPane.showMessageDialog(checkoutPanel, 
+                JOptionPane.showMessageDialog(checkoutPanel,
                     "Please select at least one item to checkout",
                     "No Items Selected",
                     JOptionPane.WARNING_MESSAGE);
             }
         });
-        
+
         buttonPanel.add(placeOrderBtn);
         checkoutPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         this.checkoutPanel = checkoutPanel;
-        updateCheckoutTotals(true);
         
+        updateCheckoutTotals(isDeliverySelected);
+
+
         return checkoutPanel;
     }
     
@@ -1247,7 +1452,6 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         g2.dispose();
         return image;
     }
-    
     
     private List<String> getUserAddresses(int userId) {
         List<String> addresses = new ArrayList<>();
@@ -1433,37 +1637,52 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         }
     }
 
-    private void updateCheckoutTotals(boolean isDelivery) {
+     private void updateCheckoutTotals(boolean isDelivery) {
         double subtotal = getCartTotal();
         double shipping = isDelivery ? 60.00 : 0.00;
-        double total = subtotal + shipping - rewardDiscount;
+        double checkoutTotal = subtotal + shipping - rewardDiscount;
+        int selectedCount = getSelectedItemCount();
 
-        // Update all labels
         SwingUtilities.invokeLater(() -> {
-            if (subtotalLabel != null) {
-                subtotalLabel.setText("Subtotal (" + getSelectedItemCount() + " items)");
+            // Update CART summary labels (using instance variables for cart view)
+            // Ensure these are only updated when the cart panel is visible if performance is a concern
+            // For now, updating them always is fine.
+            if (subtotalLabel != null) { // Instance variable for Cart subtotal TEXT
+                subtotalLabel.setText("Subtotal (" + selectedCount + " items)");
             }
-            if (subtotalValue != null) {
+            if (subtotalValue != null) { // Instance variable for Cart subtotal VALUE
                 subtotalValue.setText("₱" + String.format("%.2f", subtotal));
             }
-            if (shippingValue != null) {
-                shippingValue.setText(isDelivery ? "₱60.00" : "₱0.00");
-            }
-            if (totalValue != null) {
-                totalValue.setText("₱" + String.format("%.2f", total));
-            }
-            if (checkoutTotalValue != null) {
-                checkoutTotalValue.setText("₱" + String.format("%.2f", total));
+             if (rewardDiscountLabel != null) { // Instance variable for Cart reward TEXT+VALUE
+                 rewardDiscountLabel.setText(rewardDiscount > 0 ?
+                     "Reward Discount: -₱" + String.format("%.2f", rewardDiscount) : "");
+                 rewardDiscountLabel.setVisible(rewardDiscount > 0);
+             }
+            if (totalValue != null) { // Instance variable for Cart total VALUE (no shipping)
+                double cartTotal = subtotal - rewardDiscount; // Calculate cart total here
+                totalValue.setText("₱" + String.format("%.2f", cartTotal));
             }
 
-            // Update reward points display
-            if (rewardPointsLabel != null) {
-                rewardPointsLabel.setText("Reward Points: " + getUserRewardPoints(currentUser.getUserId()));
+            if (this.checkoutSubtotalLabel != null) { // Instance variable for Checkout subtotal TEXT
+                 this.checkoutSubtotalLabel.setText("Subtotal (" + selectedCount + " items)");
+            }
+            if (this.checkoutSubtotalValue != null) { // Instance variable for Checkout subtotal VALUE
+                this.checkoutSubtotalValue.setText("₱" + String.format("%.2f", subtotal));
+            }
+            if (this.checkoutRewardDiscountLabel != null) { // Instance variable for Checkout reward TEXT+VALUE
+                 this.checkoutRewardDiscountLabel.setText(rewardDiscount > 0 ?
+                     "-₱" + String.format("%.2f", rewardDiscount) : "");
+                 this.checkoutRewardDiscountLabel.setVisible(rewardDiscount > 0);
+            }
+            if (this.checkoutShippingValue != null) { // Instance variable for Checkout shipping VALUE
+                this.checkoutShippingValue.setText("₱" + String.format("%.2f", shipping)); // Use calculated shipping
+            }
+            if (this.checkoutTotalValue != null) { // Instance variable for Checkout total VALUE
+                this.checkoutTotalValue.setText("₱" + String.format("%.2f", checkoutTotal)); // Use calculated checkoutTotal
             }
         });
     }
-    
-    
+
     private JRadioButton createStyledRadioButton(String text, boolean selected) {
         JRadioButton radioButton = new JRadioButton(text);
         radioButton.setSelected(selected);
@@ -1475,38 +1694,39 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
     }
     
     public JPanel createOrderConfirmationPanel(JPanel cardPanel, CardLayout cardLayout) {
-        JPanel confirmationPanel = new JPanel(new BorderLayout());
-        confirmationPanel.setBackground(BACKGROUND_COLOR);
-        confirmationPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        // Create the instance panel here
+        this.orderConfirmationPanel = new JPanel(new BorderLayout()); // Use the instance variable
+        this.orderConfirmationPanel.setBackground(BACKGROUND_COLOR);
+        this.orderConfirmationPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
         JPanel centerPanel = new JPanel();
         centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
         centerPanel.setBackground(BACKGROUND_COLOR);
         centerPanel.setBorder(BorderFactory.createEmptyBorder(50, 50, 50, 50));
         centerPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        
+
         JLabel iconLabel = new JLabel();
         iconLabel.setIcon(UIManager.getIcon("OptionPane.informationIcon"));
         iconLabel.setFont(new Font("Segoe UI", Font.BOLD, 72));
         iconLabel.setForeground(SUCCESS_COLOR);
         iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        
+
         JLabel titleLabel = new JLabel("Order Placed Successfully!");
-        
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
         titleLabel.setForeground(TEXT_COLOR);
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        
+
         JLabel subtitleLabel = new JLabel("Your order has been confirmed");
         subtitleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
         subtitleLabel.setForeground(SECONDARY_TEXT);
         subtitleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        
-        JLabel orderIdLabel = new JLabel("Order ID: ORD" + generateOrderId());
-        orderIdLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        orderIdLabel.setForeground(TEXT_COLOR);
-        orderIdLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        
+
+        // Initialize the instance JLabel here
+        this.orderIdLabel = new JLabel("Order ID: Generating..."); // Use the instance variable
+        this.orderIdLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        this.orderIdLabel.setForeground(TEXT_COLOR);
+        this.orderIdLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
         JButton continueBtn = new JButton("CONTINUE SHOPPING");
         continueBtn.setBackground(BUTTON_COLOR);
         continueBtn.setForeground(Color.WHITE);
@@ -1516,7 +1736,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         continueBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         continueBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         continueBtn.setMaximumSize(new Dimension(300, 50));
-        
+
         continueBtn.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseEntered(java.awt.event.MouseEvent evt) {
                 continueBtn.setBackground(HOVER_COLOR);
@@ -1525,11 +1745,15 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
                 continueBtn.setBackground(BUTTON_COLOR);
             }
         });
-        
-        
+
         continueBtn.addActionListener(e -> {
-            cardLayout.show(cardPanel, "cart");  // Changed from "products" to "cart"
-            clearSelectedItems();
+            cardLayout.show(cardPanel, "cart");
+            // clearSelectedItems(); // This is already called by forceCartRefresh after order success/failure
+
+             // Reset the orderIdLabel text when leaving the confirmation screen
+             if (this.orderIdLabel != null) {
+                 this.orderIdLabel.setText("Order ID: Generating...");
+             }
         });
 
         centerPanel.add(iconLabel);
@@ -1538,15 +1762,15 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         centerPanel.add(Box.createVerticalStrut(10));
         centerPanel.add(subtitleLabel);
         centerPanel.add(Box.createVerticalStrut(30));
-        centerPanel.add(orderIdLabel);
+        centerPanel.add(this.orderIdLabel); // Add the instance variable JLabel
         centerPanel.add(Box.createVerticalStrut(50));
         centerPanel.add(continueBtn);
-        
-        confirmationPanel.add(centerPanel, BorderLayout.CENTER);
-        
-        return confirmationPanel;
+
+        this.orderConfirmationPanel.add(centerPanel, BorderLayout.CENTER); // Add to instance panel
+
+        return this.orderConfirmationPanel; // Return the instance panel
     }
-    
+        
     private String generateOrderId() {
         return String.format("%d%03d", System.currentTimeMillis() % 100000, (int)(Math.random() * 1000));
     }
@@ -1555,12 +1779,24 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         List<CartItem> itemsToRemove = new ArrayList<>();
         for (CartItem item : cartItems) {
             if (item.isSelected()) {
+                isDeliverySelected = true;
                 itemsToRemove.add(item);
                 removeCartItem(item.getItem().getProductId());
             }
         }
         cartItems.removeAll(itemsToRemove);
-        updateSummary();
+        
+        
+        rewardDiscount = 0.0;
+            if (rewardDiscountLabel != null) {
+                rewardDiscountLabel.setVisible(false);
+            }
+            if (checkoutRewardDiscountLabel != null) {
+                checkoutRewardDiscountLabel.setVisible(false);
+            }
+            
+            updateSummary();
+            updateCheckoutTotals(true);
     }
     
         /**
@@ -1591,7 +1827,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         System.out.println("[DEBUG] Cart display refreshed");
     }    
     
-    private void processOrder(User user) throws SQLException {
+    private Integer processOrder(User user) throws SQLException { // Return the generated order ID
         if (getSelectedItemCount() == 0) {
             throw new IllegalStateException("No items selected for order");
         }
@@ -1601,132 +1837,108 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
 
             // Calculate order totals
             double subtotal = getCartTotal();
-            double shipping = 60.00; // Default shipping fee
+            double shipping = isDeliverySelected ? 60.00 : 0.00; // Use isDeliverySelected here
             double total = subtotal + shipping - rewardDiscount;
 
             // 1. Create the order record (updated to include reward points)
+            // Add `order_id` column if it's auto-increment, or generate it here
             String orderQuery = "INSERT INTO orders (user_id, order_date, status, " +
                               "delivery_method, delivery_address, payment_method, " +
                               "subtotal, shipping_fee, reward_discount, total_amount, " +
                               "points_earned) VALUES (?, NOW(), 'PENDING', ?, ?, ?, " +
                               "?, ?, ?, ?, ?)";
 
-            PreparedStatement orderPS = conn.prepareStatement(orderQuery, 
+            PreparedStatement orderPS = conn.prepareStatement(orderQuery,
                 PreparedStatement.RETURN_GENERATED_KEYS);
 
             orderPS.setInt(1, user.getUserId());
-            orderPS.setString(2, "DELIVERY");
-            orderPS.setString(3, user.getAddress());
-            orderPS.setString(4, "COD");
+            // Use isDeliverySelected to determine delivery method string
+            orderPS.setString(2, isDeliverySelected ? "DELIVERY" : "PICKUP");
+            orderPS.setString(3, user.getAddress()); // Assuming address is always the primary user address for now
+            // Determine payment method (assuming default COD or add logic based on radio buttons)
+            orderPS.setString(4, "COD"); // <-- Needs logic to get selected payment method
             orderPS.setDouble(5, subtotal);
-            orderPS.setDouble(6, shipping);
+            orderPS.setDouble(6, shipping); // Use calculated shipping
             orderPS.setDouble(7, rewardDiscount);
-            orderPS.setDouble(8, total);
+            orderPS.setDouble(8, total); // Use calculated total
 
             // Calculate and set points earned (50 points per ₱500 spent)
-            int pointsEarned = calculateEarnedPoints(subtotal);
+            int pointsEarned = calculateEarnedPoints(subtotal); // Calculate points based on subtotal before shipping/discount
             orderPS.setInt(9, pointsEarned);
 
             orderPS.executeUpdate();
 
-        // Get the generated order ID
-        int orderId;
-        try (ResultSet generatedKeys = orderPS.getGeneratedKeys()) {
-            if (generatedKeys.next()) {
-                orderId = generatedKeys.getInt(1);
-            } else {
-                throw new SQLException("Creating order failed, no ID obtained.");
-            }
-        }
-
-        // 2. Add order items
-        String itemQuery = "INSERT INTO order_items (order_id, product_id, quantity, price_at_order) " +
-                         "VALUES (?, ?, ?, ?)";
-        PreparedStatement itemPS = conn.prepareStatement(itemQuery);
-
-        for (CartItem item : cartItems) {
-            if (item.isSelected()) {
-                itemPS.setInt(1, orderId);
-                itemPS.setInt(2, item.getItem().getProductId());
-                itemPS.setInt(3, item.getQuantity());
-                itemPS.setDouble(4, item.getItem().getPrice());
-                itemPS.addBatch();
-            }
-        }
-
-        itemPS.executeBatch();
-
-        // 3. Remove ordered items from cart
-        String deleteQuery = "DELETE FROM cart_items WHERE cart_id = ? AND product_id = ?";
-        PreparedStatement deletePS = conn.prepareStatement(deleteQuery);
-
-        for (CartItem item : cartItems) {
-            if (item.isSelected()) {
-                deletePS.setInt(1, currentCartId);
-                deletePS.setInt(2, item.getItem().getProductId());
-                deletePS.addBatch();
-            }
-        }
-
-        deletePS.executeBatch();
-
-        // Commit transaction
-        conn.commit();
-
-        // Clear selected items from local cart
-        clearSelectedItems();
-        
-        if (pointsEarned > 0) {
-            updateUserRewardPoints(user.getUserId(), pointsEarned);
-        }
-        
-        // Reset reward discount after order is processed
-        rewardDiscount = 0.0;
-        
-    } catch (SQLException e) {
-        try (Connection conn = DBConnection.getConnection()) {
-            conn.rollback();
-        }
-        throw e; // Re-throw to be handled by the SwingWorker
-    }
-}
-    
-    private void forceCartRefresh() {
-        // Reload cart items from database
-        loadCartItems();
-
-        // Recreate the cart panel
-        if (cardPanel != null) {
-            // Remove existing cart panel if it exists
-            for (Component comp : cardPanel.getComponents()) {
-                if (comp.getName() != null && comp.getName().equals("cartPanel")) {
-                    cardPanel.remove(comp);
-                    break;
+            // Get the generated order ID
+            int orderId = -1; // Initialize orderId
+            try (ResultSet generatedKeys = orderPS.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    orderId = generatedKeys.getInt(1);
+                    System.out.println("[DEBUG] Generated Order ID: " + orderId);
+                } else {
+                    throw new SQLException("Creating order failed, no ID obtained.");
                 }
             }
 
-            // Create and add new cart panel
-            JPanel newCartPanel = createCartPanel(cardPanel, cardLayout);
-            newCartPanel.setName("cartPanel");
-            cardPanel.add(newCartPanel, "cart");
+            // 2. Add order items
+            String itemQuery = "INSERT INTO order_items (order_id, product_id, quantity, price_at_order) " +
+                             "VALUES (?, ?, ?, ?)";
+            PreparedStatement itemPS = conn.prepareStatement(itemQuery);
 
-            // Force UI update
-            cardPanel.revalidate();
-            cardPanel.repaint();
+            for (CartItem item : cartItems) {
+                if (item.isSelected()) { // Only add selected items
+                    itemPS.setInt(1, orderId);
+                    itemPS.setInt(2, item.getItem().getProductId());
+                    itemPS.setInt(3, item.getQuantity());
+                    itemPS.setDouble(4, item.getItem().getPrice()); // Price at the time of order
+                    itemPS.addBatch();
+                }
+            }
+
+            itemPS.executeBatch();
+
+            // 3. Remove ordered items from cart
+            String deleteQuery = "DELETE FROM cart_items WHERE cart_id = ? AND product_id = ?";
+            PreparedStatement deletePS = conn.prepareStatement(deleteQuery);
+
+            for (CartItem item : cartItems) {
+                if (item.isSelected()) { // Only remove selected items
+                    deletePS.setInt(1, currentCartId);
+                    deletePS.setInt(2, item.getItem().getProductId());
+                    deletePS.addBatch();
+                }
+            }
+
+            deletePS.executeBatch();
+
+            // Commit transaction
+            conn.commit();
+            System.out.println("[DEBUG] Database transaction committed successfully.");
+
+            return orderId; // Return the generated order ID
+
+        } catch (SQLException e) {
+            // Rollback transaction on error
+            try (Connection conn = DBConnection.getConnection()) {
+                if (conn != null && !conn.getAutoCommit()) { // Check if connection is valid and not already committed
+                    conn.rollback();
+                     System.err.println("[ERROR] Database transaction rolled back due to error.");
+                }
+            } catch (SQLException rollbackEx) {
+                System.err.println("[ERROR] Error during rollback: " + rollbackEx.getMessage());
+                 rollbackEx.printStackTrace();
+            }
+            throw e; // Re-throw SQLException to be caught by the SwingWorker
         }
-
-        updateSummary();
     }
-    
     
     private int getSelectedItemCount() {
         int count = 0;
         for (CartItem item : cartItems) {
             if (item.isSelected()) {
-                count += item.getQuantity();
+                count += item.getQuantity(); // Add the quantity of each selected item
             }
         }
-        System.out.println("[DEBUG] Selected item count: " + count);
+        System.out.println("[DEBUG] Selected item quantity: " + count);
         return count;
     }
 
@@ -2026,22 +2238,36 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
     
     private Reward getRewardRedemption(String code, int userId) throws SQLException {
         try (Connection conn = DBConnection.getConnection()) {
-            String query = "SELECT r.name, r.discount_amount FROM reward_redemptions rr " +
+            // FIX: Select redemption_id, redeemed status, and expiry date
+            String query = "SELECT rr.redemption_id, r.name, r.discount_amount, rr.redeemed, rr.expires_at " +
+                          "FROM reward_redemptions rr " +
                           "JOIN rewards r ON rr.reward_id = r.reward_id " +
-                          "WHERE rr.redeemed = 0 AND rr.user_id = ? AND rr.code = ?";
+                          // FIX: Use BINARY for case-sensitive comparison; check for unredeemed and non-expired
+                          "WHERE rr.user_id = ? AND BINARY rr.code = ? AND rr.redeemed = 0 AND rr.expires_at > CURRENT_TIMESTAMP";
             try (PreparedStatement stmt = conn.prepareStatement(query)) {
                 stmt.setInt(1, userId);
                 stmt.setString(2, code);
                 ResultSet rs = stmt.executeQuery();
 
                 if (rs.next()) {
-                    return new Reward(
+                    Reward reward = new Reward(
                         rs.getString("name"),
                         rs.getDouble("discount_amount")
                     );
+                    // FIX: Set the redeemed status loaded from the database
+                    reward.setRedeemed(rs.getBoolean("redeemed"));
+                    // FIX: Set the expiration date loaded from the database
+                    reward.setExpiresAt(rs.getTimestamp("expires_at"));
+                    // FIX: Set the redemption ID
+                    reward.setRedemptionId(rs.getInt("redemption_id")); // Set the ID
+
+                    System.out.println("[DEBUG] Found valid redemption: ID=" + reward.getRedemptionId() + ", Name=" + reward.getName() + ", Discount=" + reward.getDiscountAmount() + ", Redeemed=" + reward.isRedeemed() + ", Expired=" + reward.isExpired());
+                    return reward; // Return the fully populated Reward object
+                } else {
+                    System.out.println("[DEBUG] No valid, unredeemed, non-expired redemption found for code: " + code + " and user: " + userId);
                 }
             }
         }
-        return null;
+        return null; // Return null if no matching redemption is found
     }
-}
+    }
