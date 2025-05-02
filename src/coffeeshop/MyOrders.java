@@ -348,68 +348,98 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         // Clear previous data
         itemsTableModel.setRowCount(0);
         orderNotes.setText("");
-        
+
         try (Connection conn = DBConnection.getConnection()) {
             // Query for order info
-            String orderQuery = 
-                "SELECT * FROM orders WHERE order_id = ? AND user_id = ?";
-            
+            // --- MODIFIED QUERY: Selected specific columns including reward_discount and points_earned ---
+            String orderQuery =
+                "SELECT o.order_date, o.status, o.delivery_method, o.delivery_address, o.payment_method, o.subtotal, o.shipping_fee, o.reward_discount, o.total_amount, o.points_earned " +
+                "FROM orders o " +
+                "WHERE o.order_id = ? AND o.user_id = ?";
+            // --- END MODIFIED QUERY ---
+
             try (PreparedStatement stmt = conn.prepareStatement(orderQuery)) {
                 stmt.setInt(1, orderId);
                 stmt.setInt(2, currentUser.getUserId());
-                
+
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
                         // Format timestamp to date string
                         Timestamp timestamp = rs.getTimestamp("order_date");
                         String formattedDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
                             .format(timestamp);
-                        
+
                         // Update order info labels
                         lblOrderDate.setText("Date: " + formattedDate);
                         lblOrderStatus.setText("Status: " + rs.getString("status"));
-                        
+
                         // Format total amount
                         DecimalFormat df = new DecimalFormat("₱#,##0.00");
                         String formattedTotal = df.format(rs.getDouble("total_amount"));
                         lblOrderTotal.setText("Total Amount: " + formattedTotal);
-                        
+
                         // Build order notes
                         StringBuilder notes = new StringBuilder();
                         notes.append("Delivery Method: ").append(rs.getString("delivery_method")).append("\n");
-                        
+
                         if ("DELIVERY".equals(rs.getString("delivery_method"))) {
-                            notes.append("Delivery Address: ").append(rs.getString("delivery_address")).append("\n");
+                            // Use getObject for address in case it's NULL
+                            Object addressObj = rs.getObject("delivery_address");
+                            notes.append("Delivery Address: ").append(addressObj != null ? addressObj.toString() : "N/A").append("\n");
                         }
-                        
+
                         notes.append("Payment Method: ").append(rs.getString("payment_method")).append("\n");
                         notes.append("Subtotal: ").append(df.format(rs.getDouble("subtotal"))).append("\n");
-                        notes.append("Shipping Fee: ").append(df.format(rs.getDouble("shipping_fee")));
-                        
+                        notes.append("Shipping Fee: ").append(df.format(rs.getDouble("shipping_fee"))).append("\n");
+
+                        // --- ADD Reward Discount and Points Earned to Notes ---
+                        double rewardDiscount = rs.getDouble("reward_discount");
+                        if (rewardDiscount > 0) {
+                            notes.append("Reward Discount: -").append(df.format(rewardDiscount)).append("\n");
+                        }
+                         notes.append("Points Earned: ").append(rs.getInt("points_earned")).append("\n");
+                        // --- END ADDitions ---
+
+
                         orderNotes.setText(notes.toString());
                     }
                 }
             }
-           
-            String itemsQuery = 
-                "SELECT oi.*, p.name " +
+
+            // Query for order items
+            // --- MODIFIED QUERY: Join with sizes to get the size name ---
+            String itemsQuery =
+                "SELECT oi.*, p.name, s.size_name " + // Select size_name
                 "FROM order_items oi " +
                 "JOIN products p ON oi.product_id = p.product_id " +
+                "LEFT JOIN sizes s ON oi.size_id = s.size_id " + // LEFT JOIN because size_id can be NULL
                 "WHERE oi.order_id = ?";
-            
+            // --- END MODIFIED QUERY ---
+
             try (PreparedStatement stmt = conn.prepareStatement(itemsQuery)) {
                 stmt.setInt(1, orderId);
-                
+
                 try (ResultSet rs = stmt.executeQuery()) {
                     DecimalFormat df = new DecimalFormat("₱#,##0.00");
-                    
+
                     while (rs.next()) {
-                        double price = rs.getDouble("price_at_order");
+                        // --- MODIFIED LOGIC: Include size name in the product display ---
+                        String productName = rs.getString("name");
+                        String sizeName = rs.getString("size_name"); // Get the size name
+
+                        String displayProduct = productName;
+                        // If sizeName is not null and not empty, append it to the product name
+                        if (sizeName != null && !sizeName.trim().isEmpty()) {
+                            displayProduct += " (" + sizeName + ")";
+                        }
+                        // --- END MODIFIED LOGIC ---
+
+                        double price = rs.getDouble("price_at_order"); // Price per item instance (already includes size price)
                         int quantity = rs.getInt("quantity");
-                        double subtotal = price * quantity;
-                        
+                        double subtotal = price * quantity; // Calculate subtotal for the row
+
                         Object[] row = {
-                            rs.getString("name"),
+                            displayProduct, // Use the combined name (Product + Size)
                             df.format(price),
                             quantity,
                             df.format(subtotal)
@@ -420,8 +450,8 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             }
         } catch (SQLException e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, 
-                "Error loading order details: " + e.getMessage(), 
+            JOptionPane.showMessageDialog(this,
+                "Error loading order details: " + e.getMessage(),
                 "Database Error", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -433,5 +463,12 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
         lblOrderTotal.setText("Total: ");
         orderNotes.setText("");
         itemsTableModel.setRowCount(0);
+    }
+    
+     public void refreshOrdersList() {
+        System.out.println("[DEBUG] MyOrders: Refreshing order list...");
+        clearOrderDetails(); // Clear details panel first
+        loadOrderData();      // Reload the main order list table
+        System.out.println("[DEBUG] MyOrders: Order list refreshed.");
     }
 }

@@ -106,7 +106,6 @@ public class ReportsSystem extends JFrame {
         // Set the content pane
         setContentPane(mainPanel);
         
-        // Load initial data
         loadReportData();
     }
     
@@ -388,8 +387,7 @@ public class ReportsSystem extends JFrame {
             new Font("Segoe UI", Font.BOLD, 14),
             Color.WHITE
         ));
-        
-        // Create table model
+       
         String[] customersColumns = {"Rank", "Customer ID", "Customer Name", "Email", "Orders", "Total Spent", "Avg Order"};
         customersTableModel = new DefaultTableModel(customersColumns, 0) {
             @Override
@@ -398,7 +396,6 @@ public class ReportsSystem extends JFrame {
             }
         };
         
-        // Create table
         customersTable = new JTable(customersTableModel);
         styleTable(customersTable);
         
@@ -497,6 +494,7 @@ public class ReportsSystem extends JFrame {
         return button;
     }
     
+    
     private void styleTable(JTable table) {
         table.setBackground(new Color(50, 50, 50));
         table.setForeground(Color.WHITE);
@@ -508,7 +506,6 @@ public class ReportsSystem extends JFrame {
         table.setIntercellSpacing(new Dimension(1, 1));
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         
-        // Style the header
         JTableHeader header = table.getTableHeader();
         header.setBackground(new Color(30, 30, 30));
         header.setForeground(new Color(218, 165, 32));
@@ -524,7 +521,7 @@ public class ReportsSystem extends JFrame {
                 return new ImageIcon(scaledIcon);
             }
         } catch (Exception e) {
-            // If icon can't be loaded, return null
+            
         }
         return null;
     }

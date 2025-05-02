@@ -26,84 +26,84 @@ public class OrderManagement extends JFrame {
     private JButton btnUpdateStatus, btnPrintOrder, btnBack;
     private User currentUser;
     
-    public OrderManagement(User user) {
+public OrderManagement(User user) {
         this.currentUser = user;
-        
+
         // Set up the frame
         setTitle("But First, Coffee - Order Management");
         setSize(1200, 700);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        
+
         // Main panel with border layout
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         mainPanel.setBackground(new Color(40, 40, 40));
-        
+
         // Header Panel
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(new Color(30, 30, 30));
         headerPanel.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
-        
+
         JLabel titleLabel = new JLabel("Order Management");
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
         titleLabel.setForeground(new Color(218, 165, 32)); // Gold
-        
+
         headerPanel.add(titleLabel, BorderLayout.WEST);
-        
+
         // Filter and Search Panel
         JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         filterPanel.setBackground(new Color(30, 30, 30));
-        
+
         JLabel filterLabel = new JLabel("Status:");
         filterLabel.setForeground(Color.WHITE);
         filterPanel.add(filterLabel);
-        
+
         filterStatus = new JComboBox<>(new String[]{"All", "PENDING", "PROCESSING","ON ITS WAY", "DELIVERED", "CANCELLED"});
         filterStatus.setBackground(new Color(60, 60, 60));
         filterStatus.setForeground(Color.WHITE);
         filterStatus.addActionListener(e -> loadOrderData());
         filterPanel.add(filterStatus);
-        
+
         filterPanel.add(Box.createHorizontalStrut(15));
-        
+
         JLabel searchLabel = new JLabel("Search:");
         searchLabel.setForeground(Color.WHITE);
         filterPanel.add(searchLabel);
-        
+
         searchField = new JTextField(15);
         searchField.setBackground(new Color(60, 60, 60));
         searchField.setForeground(Color.WHITE);
         searchField.setCaretColor(Color.WHITE);
         searchField.addActionListener(e -> loadOrderData());
         filterPanel.add(searchField);
-        
+
         JButton btnSearch = new JButton("Search");
         styleButton(btnSearch, new Color(218, 165, 32), Color.BLACK);
         btnSearch.addActionListener(e -> loadOrderData());
         filterPanel.add(btnSearch);
-        
+
         headerPanel.add(filterPanel, BorderLayout.EAST);
-        
+
         // Content Panel (split between orders list and order details)
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setDividerLocation(600);
         splitPane.setBackground(new Color(40, 40, 40));
         splitPane.setBorder(BorderFactory.createEmptyBorder());
-        
+
         // Orders Table Panel (left side)
         JPanel ordersPanel = new JPanel(new BorderLayout(0, 10));
         ordersPanel.setBackground(new Color(40, 40, 40));
-        
-        // Table columns
-        String[] columns = {"Order ID", "Customer", "Date", "Status", "Total"};
-        tableModel = new DefaultTableModel(columns, 0) {
+
+        // Table columns for orders table
+        String[] ordersColumns = {"Order ID", "Customer", "Date", "Status", "Total"}; // Renamed for clarity
+        tableModel = new DefaultTableModel(ordersColumns, 0) { // Used for ordersTable
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false; // Make table non-editable
             }
         };
-        
+
         ordersTable = new JTable(tableModel);
         ordersTable.setBackground(new Color(50, 50, 50));
         ordersTable.setForeground(Color.WHITE);
@@ -112,36 +112,40 @@ public class OrderManagement extends JFrame {
         ordersTable.getTableHeader().setBackground(new Color(30, 30, 30));
         ordersTable.getTableHeader().setForeground(Color.WHITE);
         ordersTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
-        
-        // Set column widths
+
+        // Set column widths for orders table
         ordersTable.getColumnModel().getColumn(0).setPreferredWidth(70);     // Order ID
         ordersTable.getColumnModel().getColumn(1).setPreferredWidth(200);    // Customer
         ordersTable.getColumnModel().getColumn(2).setPreferredWidth(150);    // Date
         ordersTable.getColumnModel().getColumn(3).setPreferredWidth(100);    // Status
         ordersTable.getColumnModel().getColumn(4).setPreferredWidth(80);     // Total
-        
+
         // Add selection listener
         ordersTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 int selectedRow = ordersTable.getSelectedRow();
                 if (selectedRow != -1) {
-                    int orderId = (int) ordersTable.getValueAt(selectedRow, 0);
+                    // Get the orderId from the data model row, not the table view row
+                    // (important if sorting/filtering is ever added)
+                    int modelRow = ordersTable.convertRowIndexToModel(selectedRow);
+                    int orderId = (int) tableModel.getValueAt(modelRow, 0);
                     loadOrderDetails(orderId);
                 }
             }
         });
-        
-        // Add table to a scroll pane
+
+
+        // Add orders table to a scroll pane
         JScrollPane orderScrollPane = new JScrollPane(ordersTable);
         orderScrollPane.setBorder(BorderFactory.createEmptyBorder());
         orderScrollPane.getViewport().setBackground(new Color(50, 50, 50));
         ordersPanel.add(orderScrollPane, BorderLayout.CENTER);
-        
+
         // Order Details Panel (right side)
         JPanel detailsPanel = new JPanel(new BorderLayout(0, 15));
         detailsPanel.setBackground(new Color(40, 40, 40));
         detailsPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
-        
+
         // Order info panel
         JPanel orderInfoPanel = new JPanel(new GridLayout(0, 1, 5, 5));
         orderInfoPanel.setBackground(new Color(50, 50, 50));
@@ -149,63 +153,78 @@ public class OrderManagement extends JFrame {
             BorderFactory.createLineBorder(new Color(70, 70, 70)),
             BorderFactory.createEmptyBorder(10, 10, 10, 10)
         ));
-        
+
         lblOrderDate = new JLabel("Date: ");
         lblOrderDate.setForeground(Color.WHITE);
         orderInfoPanel.add(lblOrderDate);
-        
+
         lblCustomerInfo = new JLabel("Customer: ");
         lblCustomerInfo.setForeground(Color.WHITE);
         orderInfoPanel.add(lblCustomerInfo);
-        
+
         lblOrderStatus = new JLabel("Status: ");
         lblOrderStatus.setForeground(Color.WHITE);
         orderInfoPanel.add(lblOrderStatus);
-        
+
         lblOrderTotal = new JLabel("Total: ");
         lblOrderTotal.setForeground(Color.WHITE);
         lblOrderTotal.setFont(new Font("Segoe UI", Font.BOLD, 14));
         orderInfoPanel.add(lblOrderTotal);
-        
+
         // Order items table
         JPanel itemsPanel = new JPanel(new BorderLayout(0, 5));
         itemsPanel.setBackground(new Color(40, 40, 40));
-        
+
         JLabel itemsTitle = new JLabel("Order Items");
         itemsTitle.setFont(new Font("Segoe UI", Font.BOLD, 14));
         itemsTitle.setForeground(Color.WHITE);
         itemsPanel.add(itemsTitle, BorderLayout.NORTH);
-        
-        String[] itemColumns = {"Product", "Price", "Quantity", "Subtotal"};
-        itemsTableModel = new DefaultTableModel(itemColumns, 0) {
+
+        // Table columns for order items table
+        String[] itemColumns = {"Product", "Price", "Quantity", "Subtotal"}; // Used for orderItemsTable
+        itemsTableModel = new DefaultTableModel(itemColumns, 0) { // Used for orderItemsTable
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false; // Make table non-editable
             }
         };
-        
-        orderItemsTable = new JTable(itemsTableModel);
+
+        orderItemsTable = new JTable(itemsTableModel); // Initialize the table
         orderItemsTable.setBackground(new Color(50, 50, 50));
         orderItemsTable.setForeground(Color.WHITE);
         orderItemsTable.setGridColor(new Color(70, 70, 70));
         orderItemsTable.setRowHeight(25);
         orderItemsTable.getTableHeader().setBackground(new Color(30, 30, 30));
         orderItemsTable.getTableHeader().setForeground(Color.WHITE);
-        
+         // Re-apply the header renderer or set header properties directly for item table too
+         orderItemsTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
+
+
         JScrollPane itemsScrollPane = new JScrollPane(orderItemsTable);
         itemsScrollPane.setBorder(BorderFactory.createEmptyBorder());
         itemsScrollPane.getViewport().setBackground(new Color(50, 50, 50));
         itemsPanel.add(itemsScrollPane, BorderLayout.CENTER);
-        
+
+        // --- ADDED CODE BLOCK ---
+        // Set column widths for the orderItemsTable AFTER it's created and added to scroll pane
+        // Adjust the preferred width for the "Product" column (index 0)
+        orderItemsTable.getColumnModel().getColumn(0).setPreferredWidth(250); // Increased width
+        // You can optionally set widths for other columns too if needed
+        orderItemsTable.getColumnModel().getColumn(1).setPreferredWidth(80);  // Price
+        orderItemsTable.getColumnModel().getColumn(2).setPreferredWidth(80);  // Quantity
+        orderItemsTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Subtotal
+        // --- END ADDED CODE BLOCK ---
+
+
         // Notes panel
         JPanel notesPanel = new JPanel(new BorderLayout(0, 5));
         notesPanel.setBackground(new Color(40, 40, 40));
-        
+
         JLabel notesTitle = new JLabel("Order Notes & Details");
         notesTitle.setFont(new Font("Segoe UI", Font.BOLD, 14));
         notesTitle.setForeground(Color.WHITE);
         notesPanel.add(notesTitle, BorderLayout.NORTH);
-        
+
         orderNotes = new JTextArea(4, 20);
         orderNotes.setBackground(new Color(60, 60, 60));
         orderNotes.setForeground(Color.WHITE);
@@ -216,54 +235,59 @@ public class OrderManagement extends JFrame {
         JScrollPane notesScrollPane = new JScrollPane(orderNotes);
         notesScrollPane.setBorder(BorderFactory.createEmptyBorder());
         notesPanel.add(notesScrollPane, BorderLayout.CENTER);
-        
+
         // Action buttons
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         actionPanel.setBackground(new Color(40, 40, 40));
-        
+
         btnUpdateStatus = new JButton("Update Status");
         styleButton(btnUpdateStatus, new Color(0, 102, 204), Color.WHITE);
         btnUpdateStatus.addActionListener(e -> updateOrderStatus());
         btnUpdateStatus.setEnabled(false);
-        
+
         btnPrintOrder = new JButton("Print Order");
         styleButton(btnPrintOrder, new Color(70, 70, 70), Color.WHITE);
         btnPrintOrder.addActionListener(e -> printOrder());
         btnPrintOrder.setEnabled(false);
-        
+
         actionPanel.add(btnUpdateStatus);
         actionPanel.add(btnPrintOrder);
-        
+
         // Combine all panels in details panel
         JPanel topDetailsPanel = new JPanel(new BorderLayout(0, 10));
         topDetailsPanel.setBackground(new Color(40, 40, 40));
         topDetailsPanel.add(orderInfoPanel, BorderLayout.NORTH);
         topDetailsPanel.add(itemsPanel, BorderLayout.CENTER);
-        
+
         detailsPanel.add(topDetailsPanel, BorderLayout.CENTER);
         detailsPanel.add(notesPanel, BorderLayout.SOUTH);
-        
+
         // Add panels to split pane
         splitPane.setLeftComponent(ordersPanel);
         splitPane.setRightComponent(detailsPanel);
-        
+
         // Button Panel (bottom)
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonPanel.setBackground(new Color(40, 40, 40));
-        
+
         btnBack = new JButton("Back to Dashboard");
         styleButton(btnBack, new Color(70, 70, 70), Color.WHITE);
         btnBack.addActionListener(e -> dispose());
         buttonPanel.add(btnBack);
-        
+
         // Add components to main panel
         mainPanel.add(headerPanel, BorderLayout.NORTH);
         mainPanel.add(splitPane, BorderLayout.CENTER);
         mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        // actionPanel is added to BorderLayout.EAST, potentially taking space from the splitPane
+        // Consider if this is the desired layout - typically action buttons affect the selected
+        // item and would be closer to the details panel or below it.
+        // For now, keeping the original structure but noting this.
         mainPanel.add(actionPanel, BorderLayout.EAST);
-        
+
+
         setContentPane(mainPanel);
-        
+
         // Load initial data
         loadOrderData();
     }
@@ -369,81 +393,103 @@ public class OrderManagement extends JFrame {
         }
     }
     
-    private void loadOrderDetails(int orderId) {
+private void loadOrderDetails(int orderId) {
         // Clear previous data
         itemsTableModel.setRowCount(0);
         orderNotes.setText("");
-        
+
         try (Connection conn = DBConnection.getConnection()) {
             // Query for order info
-            String orderQuery = 
+            String orderQuery =
                 "SELECT o.*, u.full_name, u.email, u.phone, u.address " +
                 "FROM orders o " +
                 "JOIN users u ON o.user_id = u.user_id " +
                 "WHERE o.order_id = ?";
-            
+
             try (PreparedStatement stmt = conn.prepareStatement(orderQuery)) {
                 stmt.setInt(1, orderId);
-                
+
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
                         // Format timestamp to date string
                         Timestamp timestamp = rs.getTimestamp("order_date");
                         String formattedDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
                             .format(timestamp);
-                        
+
                         // Update order info labels
                         lblOrderDate.setText("Date: " + formattedDate);
                         lblCustomerInfo.setText("Customer: " + rs.getString("full_name") + " (" + rs.getString("email") + ")");
                         lblOrderStatus.setText("Status: " + rs.getString("status"));
-                        
+
                         // Format total amount
                         DecimalFormat df = new DecimalFormat("₱#,##0.00");
                         String formattedTotal = df.format(rs.getDouble("total_amount"));
                         lblOrderTotal.setText("Total Amount: " + formattedTotal);
-                        
+
                         // Build order notes
                         StringBuilder notes = new StringBuilder();
                         notes.append("Delivery Method: ").append(rs.getString("delivery_method")).append("\n");
-                        
+
                         if ("DELIVERY".equals(rs.getString("delivery_method"))) {
                             notes.append("Delivery Address: ").append(rs.getString("delivery_address")).append("\n");
                         }
-                        
+
                         notes.append("Payment Method: ").append(rs.getString("payment_method")).append("\n");
                         notes.append("Phone: ").append(rs.getString("phone")).append("\n");
                         notes.append("Subtotal: ").append(df.format(rs.getDouble("subtotal"))).append("\n");
-                        notes.append("Shipping Fee: ").append(df.format(rs.getDouble("shipping_fee")));
-                        
+                        notes.append("Shipping Fee: ").append(df.format(rs.getDouble("shipping_fee"))).append("\n");
+
+                        // --- Add Reward Discount and Points Earned to Notes ---
+                        if (rs.getDouble("reward_discount") > 0) {
+                            notes.append("Reward Discount: -").append(df.format(rs.getDouble("reward_discount"))).append("\n");
+                        }
+                        notes.append("Points Earned: ").append(rs.getInt("points_earned")).append("\n");
+                        // --- End Additions ---
+
+
                         orderNotes.setText(notes.toString());
-                        
+
                         // Enable buttons
                         btnUpdateStatus.setEnabled(true);
                         btnPrintOrder.setEnabled(true);
                     }
                 }
             }
-            
+
             // Query for order items
-            String itemsQuery = 
-                "SELECT oi.*, p.name " +
+            // --- MODIFIED QUERY: Join with sizes to get the size name ---
+            String itemsQuery =
+                "SELECT oi.*, p.name, s.size_name " + // Select size_name
                 "FROM order_items oi " +
                 "JOIN products p ON oi.product_id = p.product_id " +
+                "LEFT JOIN sizes s ON oi.size_id = s.size_id " + // LEFT JOIN because size_id can be NULL
                 "WHERE oi.order_id = ?";
-            
+            // --- END MODIFIED QUERY ---
+
             try (PreparedStatement stmt = conn.prepareStatement(itemsQuery)) {
                 stmt.setInt(1, orderId);
-                
+
                 try (ResultSet rs = stmt.executeQuery()) {
                     DecimalFormat df = new DecimalFormat("₱#,##0.00");
-                    
+
                     while (rs.next()) {
-                        double price = rs.getDouble("price_at_order");
+                        // --- MODIFIED LOGIC: Include size name in the product display ---
+                        String productName = rs.getString("name");
+                        String sizeName = rs.getString("size_name"); // Get the size name
+
+                        String displayProduct = productName;
+                        // If sizeName is not null and not empty, append it to the product name
+                        if (sizeName != null && !sizeName.trim().isEmpty()) {
+                            displayProduct += " (" + sizeName + ")";
+                        }
+                        // --- END MODIFIED LOGIC ---
+
+                        double price = rs.getDouble("price_at_order"); // Price per item instance (already includes size price)
                         int quantity = rs.getInt("quantity");
-                        double subtotal = price * quantity;
-                        
+                        double subtotal = price * quantity; // Calculate subtotal for the row
+
                         Object[] row = {
-                            rs.getString("name"),
+                            displayProduct, // Use the combined name (Product + Size)
                             df.format(price),
                             quantity,
                             df.format(subtotal)
@@ -454,8 +500,8 @@ public class OrderManagement extends JFrame {
             }
         } catch (SQLException e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, 
-                "Error loading order details: " + e.getMessage(), 
+            JOptionPane.showMessageDialog(this,
+                "Error loading order details: " + e.getMessage(),
                 "Database Error", JOptionPane.ERROR_MESSAGE);
         }
     }
