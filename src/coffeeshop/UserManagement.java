@@ -33,8 +33,8 @@ public class UserManagement extends JFrame {
         // Set up the frame
         setTitle("But First, Coffee - User Management");
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setSize(1000, 600);
-        setLocationRelativeTo(null);
+        setExtendedState(JFrame.MAXIMIZED_BOTH); // <-- ADD THIS LINE
+        setUndecorated(false); 
         
         // Initialize main panel
         mainPanel = new JPanel(new BorderLayout(10, 10));

@@ -75,8 +75,12 @@ import javax.swing.plaf.basic.BasicComboBoxUI; // Added
         public RegisterForm() {
         setTitle("But First, Coffee - Register");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 900); // Increased height to accommodate more fields
-        setLocationRelativeTo(null);
+        // Make the frame full screen
+        setExtendedState(JFrame.MAXIMIZED_BOTH); // <-- ADDED THIS LINE
+        setUndecorated(false); // Keep standard window decorations (title bar, borders) <-- ADDED THIS LINE
+        // setSize(800, 900); // <-- REMOVED THIS LINE
+        // setLocationRelativeTo(null); // <-- REMOVED THIS LINE
+
 
         // Main panel with dark theme
         JPanel mainPanel = new JPanel(new BorderLayout());
@@ -429,7 +433,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI; // Added
                  g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
              }
          });
-    } 
+    }
 
      // Helper method to create the colored arrow icon for the combobox
     private Image createColoredArrowIcon() {
@@ -446,18 +450,14 @@ import javax.swing.plaf.basic.BasicComboBoxUI; // Added
     private JPanel createHeaderPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(Color.BLACK);
-        panel.setPreferredSize(new Dimension(550, 200)); // Increased width and height
+        // panel.setPreferredSize(new Dimension(550, 200)); // <-- REMOVED FIXED SIZE - Height is now dynamic
 
-        // Header Title
-        JLabel titleLabel = new JLabel("BUT FIRST, COFFEE", SwingConstants.CENTER);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 30)); // Increased font size
-        titleLabel.setForeground(ACCENT_COLOR_GOLD); // Gold text
-        titleLabel.setBorder(BorderFactory.createEmptyBorder(50, 0, 20, 0));
-        panel.add(titleLabel, BorderLayout.NORTH);
-
-        // Logo panel
-        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        // Logo panel (NORTH)
+        // Changed FlowLayout vertical gap to match LoginForm's implicit gap better
+        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0)); // Adjusted vertical gap
         logoPanel.setBackground(Color.BLACK);
+        // Added top padding to the logo panel itself, reduced bottom padding slightly
+        logoPanel.setBorder(BorderFactory.createEmptyBorder(30, 0, 5, 0)); // Add 30px top, 5px bottom padding
 
         // Try to load the logo
         URL logoUrl = getClass().getResource("/images/logo.png");
@@ -474,7 +474,16 @@ import javax.swing.plaf.basic.BasicComboBoxUI; // Added
             logoPanel.add(coffeeIcon);
         }
 
-        panel.add(logoPanel, BorderLayout.CENTER);
+        // Header Title (CENTER)
+        JLabel titleLabel = new JLabel("BUT FIRST, COFFEE", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 30)); // Increased font size
+        titleLabel.setForeground(ACCENT_COLOR_GOLD); // Gold text
+        // Adjusted border - removed top padding, keep bottom padding - Reduced bottom padding
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0)); // Adjusted bottom padding
+
+
+        panel.add(logoPanel, BorderLayout.NORTH); // Logo is NORTH
+        panel.add(titleLabel, BorderLayout.CENTER); // Title is CENTER
 
         return panel;
     }
@@ -543,6 +552,7 @@ import javax.swing.plaf.basic.BasicComboBoxUI; // Added
          }
 
 
+        // Assuming UserDAO and User classes exist and are correctly implemented
         UserDAO userDAO = new UserDAO();
         if (userDAO.isEmailTaken(email)) {
             JOptionPane.showMessageDialog(this,
@@ -554,7 +564,8 @@ import javax.swing.plaf.basic.BasicComboBoxUI; // Added
         // Create new user
         User newUser = new User();
         newUser.setPassword(password); // Password hashing should ideally happen in DAO
-        newUser.setEmail(email);
+        newUser.setEmail(email); // Using email as the username for login consistency
+        newUser.setUsername(email); // IMPORTANT: Set username to email for Login form compatibility
         newUser.setFullName(fullName);
         newUser.setPhone(phone);
         newUser.setAddress(fullAddress); // Set the constructed full address

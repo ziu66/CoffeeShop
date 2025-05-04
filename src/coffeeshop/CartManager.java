@@ -109,11 +109,12 @@ import javax.swing.plaf.basic.BasicComboBoxUI;
             return cartItems;
         }
 
-       public double getCartTotal() {
+        public double getCartTotal() {
             double total = 0.0;
             for (CartItem item : cartItems) {
                 if (item.isSelected()) {
-                    double itemTotal = item.getItem().getPrice() * item.getQuantity();
+                    // Use the calculated price of the item (which includes size pricing) * quantity
+                    double itemTotal = item.getCalculatedPrice() * item.getQuantity();
                     total += itemTotal;
                 }
             }

@@ -571,7 +571,7 @@ import javax.swing.border.Border;
             return new ImageIcon(image);
         }
 
-      private JPanel createItemPanel(MenuItem item) {
+ private JPanel createItemPanel(MenuItem item) {
         // Main panel using BoxLayout for vertical stacking
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -599,7 +599,8 @@ import javax.swing.border.Border;
         imageLabel.setHorizontalAlignment(JLabel.CENTER);
         imageLabel.setVerticalAlignment(JLabel.CENTER);
 
-         ImageHandler.loadItemImage(item);
+         // Load image here or use the cached one
+         // ImageHandler.loadItemImage(item); // Already loading in background thread for sections
 
         if (item.getImageIcon() != null) {
             imageLabel.setIcon(item.getImageIcon());
@@ -624,14 +625,19 @@ import javax.swing.border.Border;
         nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT); // *** Align name CENTER within textPanel's BoxLayout ***
 
 
-        // Price Label (centered within the textPanel)
-        // Note: This price label will now show the *base* price from the products table,
-        // which might be a placeholder for drinks. The size-specific price is shown in the size selection dialog.
-        JLabel priceLabel = new JLabel("P" + String.format("%.2f", item.getPrice())); // Display base price from MenuItem
-        // *** Price Font Size 13, bold ***
-        priceLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        priceLabel.setForeground(new Color(218, 165, 32)); // Gold color
-        priceLabel.setAlignmentX(Component.CENTER_ALIGNMENT); // *** Align price CENTER within textPanel's BoxLayout ***
+        // Price Label - MODIFIED: Show placeholder for drinks, actual price for others
+        JLabel priceLabel;
+        if (item.getCategory().equals("DRINK")) {
+            priceLabel = new JLabel("Select size for price"); // Placeholder text
+            priceLabel.setFont(new Font("Segoe UI", Font.ITALIC, 11)); // Use italic/smaller font for placeholder
+            priceLabel.setForeground(new Color(180, 180, 180)); // Lighter gray color
+        } else {
+            // For MEAL/MERCHANDISE, display the base price
+            priceLabel = new JLabel("P" + String.format("%.2f", item.getPrice()));
+            priceLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+            priceLabel.setForeground(new Color(218, 165, 32)); // Gold color
+        }
+        priceLabel.setAlignmentX(Component.CENTER_ALIGNMENT); // Center the label
 
 
         // Add description if available (centered within the textPanel)
@@ -645,17 +651,19 @@ import javax.swing.border.Border;
             descLabel.setForeground(new Color(200, 200, 200)); // Lighter grey
             descLabel.setAlignmentX(Component.CENTER_ALIGNMENT); // *** Align description CENTER within textPanel's BoxLayout ***
 
-            // Add components to the textPanel with spacing
+            // Add components to the textPanel with spacing (Name, Desc, Price)
             textPanel.add(nameLabel);
             textPanel.add(Box.createVerticalStrut(3)); // Small gap after name
-            textPanel.add(priceLabel);
-            textPanel.add(Box.createVerticalStrut(3)); // Small gap after price
-            textPanel.add(descLabel);
+            textPanel.add(descLabel); // Add description here
+            textPanel.add(Box.createVerticalStrut(3)); // Small gap after description
+            textPanel.add(priceLabel); // Add price here
         } else {
-            // Add components to the textPanel with spacing (no description)
+            // Add components to the textPanel with spacing (Name, Price)
             textPanel.add(nameLabel);
             textPanel.add(Box.createVerticalStrut(5)); // Slightly larger gap after name if no description
-            textPanel.add(priceLabel);
+            textPanel.add(priceLabel); // Add price here
+             // Add vertical strut to take up space where description would be
+             textPanel.add(Box.createVerticalStrut(15)); // Approx height of desc + its padding
         }
 
         // *** Align the textPanel block itself to the CENTER in the main panel's BoxLayout ***
@@ -1727,5 +1735,4 @@ import javax.swing.border.Border;
          public JPanel getCachedPanel(String name) {
             return panelCache.get(name);
         }
-         
     }
